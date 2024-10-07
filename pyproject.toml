@@ -10,3 +10,8 @@ version = "0.0.1-alpha"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
+
+[tool.poetry.dependencies]
+python = "^3.10,<4.0"
+
+maturin = "^1.0,<2.0"
