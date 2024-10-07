@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.0,<2.0"]
+build-backend = "maturin"
+
+[tool.poetry]
+authors = ["Josh Learn <josh@exponent.run>"]
+description = "A Python wrapper for ripgrep using PyO3"
+name = "python-ripgrep"
+version = "0.0.1-alpha"
+
+[tool.maturin]
+features = ["pyo3/extension-module"]
