@@ -6,7 +6,7 @@ build-backend = "maturin"
 authors = ["Josh Learn <josh@exponent.run>"]
 description = "A Python wrapper for ripgrep using PyO3"
 name = "python-ripgrep"
-version = "0.0.1-alpha"
+version = "0.0.1"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

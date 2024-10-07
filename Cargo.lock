@@ -322,7 +322,7 @@ dependencies = [
 
 [[package]]
 name = "python_ripgrep"
-version = "0.0.1-alpha"
+version = "0.0.1"
 dependencies = [
  "grep-printer",
  "grep-regex",
