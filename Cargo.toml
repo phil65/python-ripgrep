@@ -8,7 +8,7 @@ name = "python_ripgrep"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22.3", features = ["extension-module"] }
+pyo3 = { version = "0.22.3", features = ["extension-module", "abi3-py38", "generate-import-lib"] }
 
 # Dependencies for ripgrep_core
 glob = "0.3"
@@ -17,7 +17,6 @@ rayon = "1.5"
 grep = "0.3.2"
 grep-cli = "0.1"
 grep-matcher = "0.1"
-grep-pcre2 = "0.1"
 grep-printer = "0.2.2"
 grep-regex = "0.1"
 grep-searcher = "0.1"
@@ -33,6 +32,3 @@ bstr = "1.7.0"
 
 [lints.rust]
 dead_code = "allow"
-
-[features]
-pcre2 = ["grep/pcre2"]
