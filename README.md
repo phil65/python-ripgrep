@@ -81,19 +81,19 @@ As of now, the library implements a subset of ripgrep's functionality. The main 
 The following is a checklist of ripgrep flags that have been implemented in this Python wrapper:
 
 - [x] `patterns`: Search patterns
-- [x] `paths`: Paths to search
-- [x] `globs`: File patterns to include or exclude
+- [x] `paths`: Paths to search (default: current directory)
+- [x] `globs`: File patterns to include or exclude (default: all non-ignored files)
 - [x] `heading`: (Optional) Whether to show file names above matching lines
 - [x] `sort`: (Optional) Sort mode for search results
 - [x] `max_count`: (Optional) Maximum number of matches to show per file
+- [x] `after_context`: (Optional) Number of lines to show after each match
+- [x] `before_context`: (Optional) Number of lines to show before each match
 - [x] `separator_field_context`: (Optional) Separator between fields in context lines
 - [x] `separator_field_match`: (Optional) Separator between fields in matching lines
 - [x] `separator_context`: (Optional) Separator between context lines
 
 The following flags from ripgrep are not yet implemented in this wrapper:
 
-- [ ] `-A, --after-context`: Show lines after each match
-- [ ] `-B, --before-context`: Show lines before each match
 - [ ] `-C, --context`: Show lines before and after each match
 - [ ] `--color`: Controls when to use color in output
 - [ ] `-c, --count`: Only show the count of matching lines

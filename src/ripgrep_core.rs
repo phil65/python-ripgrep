@@ -17,6 +17,8 @@ pub struct PyArgs {
     pub paths: Option<Vec<String>>,
     pub globs: Option<Vec<String>>,
     pub heading: Option<bool>,
+    pub after_context: Option<u64>,
+    pub before_context: Option<u64>,
     pub separator_field_context: Option<String>,
     pub separator_field_match: Option<String>,
     pub separator_context: Option<String>,
@@ -32,6 +34,8 @@ impl PyArgs {
         paths=None, 
         globs=None, 
         heading=None, 
+        after_context=None,
+        before_context=None,
         separator_field_context=None, 
         separator_field_match=None, 
         separator_context=None,
@@ -43,6 +47,8 @@ impl PyArgs {
         paths: Option<Vec<String>>, 
         globs: Option<Vec<String>>,
         heading: Option<bool>,
+        after_context: Option<u64>,
+        before_context: Option<u64>,
         separator_field_context: Option<String>,
         separator_field_match: Option<String>,
         separator_context: Option<String>,
@@ -54,6 +60,8 @@ impl PyArgs {
             paths,
             globs,
             heading,
+            after_context,
+            before_context,
             separator_field_context,
             separator_field_match,
             separator_context,
@@ -124,6 +132,20 @@ fn build_sort_mode(sort: Option<PySortMode>) -> Option<lowargs::SortMode> {
     }
 }
 
+fn build_context_mode(after_context: Option<u64>, before_context: Option<u64>) -> lowargs::ContextMode {
+    let mut context_mode = lowargs::ContextMode::default();
+
+    if let Some(after) = after_context {
+        context_mode.set_after(after as usize);
+    }
+
+    if let Some(before) = before_context {
+        context_mode.set_before(before as usize);
+    }
+
+    context_mode
+}
+
 fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiArgs> {
     let mut low_args = lowargs::LowArgs::default();
 
@@ -136,6 +158,8 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     low_args.heading = py_args.heading;
 
     low_args.max_count = py_args.max_count;
+
+    low_args.context = build_context_mode(py_args.after_context, py_args.before_context);
 
     if let Some(globs) = &py_args.globs {
         low_args.globs = globs.clone();
