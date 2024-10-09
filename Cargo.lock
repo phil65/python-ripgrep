@@ -127,6 +127,7 @@ checksum = "308ae749734e28d749a86f33212c7b756748568ce332f970ac1d9cd8531f32e6"
 dependencies = [
  "grep-cli",
  "grep-matcher",
+ "grep-pcre2",
  "grep-printer",
  "grep-regex",
  "grep-searcher",

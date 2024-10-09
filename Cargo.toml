@@ -33,3 +33,6 @@ bstr = "1.7.0"
 
 [lints.rust]
 dead_code = "allow"
+
+[features]
+pcre2 = ["grep/pcre2"]

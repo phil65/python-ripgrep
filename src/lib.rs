@@ -12,16 +12,3 @@ fn python_ripgrep(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(py_files, m)?)?;
     Ok(())
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_hello_world() {
-        Python::with_gil(|py| {
-            let result = hello_world().unwrap();
-            assert_eq!(result, "Hello, world!");
-        });
-    }
-}
