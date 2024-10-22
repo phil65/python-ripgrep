@@ -14,6 +14,7 @@ class PyArgs:
         separator_context: str | None = None,
         sort: PySortMode | None = None,
         max_count: int | None = None,
+        line_number: bool | None = None,
     ): ...
 
 class PySortMode:

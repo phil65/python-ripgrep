@@ -24,6 +24,7 @@ pub struct PyArgs {
     pub separator_context: Option<String>,
     pub sort: Option<PySortMode>,
     pub max_count: Option<u64>,
+    pub line_number: Option<bool>,
 }
 
 #[pymethods]
@@ -41,6 +42,7 @@ impl PyArgs {
         separator_context=None,
         sort=None,
         max_count=None,
+        line_number=None,
     ))]
     fn new(
         patterns: Vec<String>, 
@@ -54,6 +56,7 @@ impl PyArgs {
         separator_context: Option<String>,
         sort: Option<PySortMode>,
         max_count: Option<u64>,
+        line_number: Option<bool>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -67,6 +70,7 @@ impl PyArgs {
             separator_context,
             sort,
             max_count,
+            line_number,
         }
     }
 }
@@ -158,6 +162,8 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     low_args.heading = py_args.heading;
 
     low_args.max_count = py_args.max_count;
+
+    low_args.line_number = py_args.line_number;
 
     low_args.context = build_context_mode(py_args.after_context, py_args.before_context);
 
