@@ -26,16 +26,14 @@ pip install python-ripgrep
 Here's a basic example of how to use python-ripgrep:
 
 ```python
-from python_ripgrep import search, PyArgs
+from python_ripgrep import search
 
 # Perform a simple search, returning a
 # list of string results grouped by file.
 results = search(
-    PyArgs(
-        patterns=["pattern"],
-        paths=["path/to/search"],
-        globs=["*.py"],
-    )
+    patterns=["pattern"],
+    paths=["path/to/search"],
+    globs=["*.py"],
 )
 
 # Process the results
@@ -49,7 +47,6 @@ The main components of python-ripgrep are:
 
 - `search`: The primary function for performing searches
 - `files`: A function for listing files that would be searched (--files equivalent)
-- `PyArgs`: A class for configuring search parameters
 - `PySortMode` and `PySortModeKind`: Enums for specifying sort modes
 
 For detailed API documentation, please refer to the source code comments.
