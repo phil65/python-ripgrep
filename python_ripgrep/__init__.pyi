@@ -1,22 +1,5 @@
 import enum
 
-class PyArgs:
-    def __init__(
-        self,
-        patterns: list[str],
-        paths: list[str] | None = None,
-        globs: list[str] | None = None,
-        heading: bool | None = None,
-        after_context: int | None = None,
-        before_context: int | None = None,
-        separator_field_context: str | None = None,
-        separator_field_match: str | None = None,
-        separator_context: str | None = None,
-        sort: PySortMode | None = None,
-        max_count: int | None = None,
-        line_number: bool | None = None,
-    ): ...
-
 class PySortMode:
     kind: PySortModeKind
     reverse: bool = False
@@ -29,5 +12,31 @@ class PySortModeKind(enum.Enum):
     LastAccessed = enum.auto()
     Created = enum.auto()
 
-def search(args: PyArgs) -> list[str]: ...
-def files(args: PyArgs) -> list[str]: ...
+def search(
+    patterns: list[str],
+    paths: list[str] | None = None,
+    globs: list[str] | None = None,
+    heading: bool | None = None,
+    after_context: int | None = None,
+    before_context: int | None = None,
+    separator_field_context: str | None = None,
+    separator_field_match: str | None = None,
+    separator_context: str | None = None,
+    sort: PySortMode | None = None,
+    max_count: int | None = None,
+    line_number: bool | None = None,
+) -> list[str]: ...
+def files(
+    patterns: list[str],
+    paths: list[str] | None = None,
+    globs: list[str] | None = None,
+    heading: bool | None = None,
+    after_context: int | None = None,
+    before_context: int | None = None,
+    separator_field_context: str | None = None,
+    separator_field_match: str | None = None,
+    separator_context: str | None = None,
+    sort: PySortMode | None = None,
+    max_count: int | None = None,
+    line_number: bool | None = None,
+) -> list[str]: ...

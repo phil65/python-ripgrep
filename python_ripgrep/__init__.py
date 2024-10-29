@@ -1,3 +1,3 @@
-from .python_ripgrep import PyArgs, PySortMode, PySortModeKind, files, search
+from .python_ripgrep import PySortMode, PySortModeKind, files, search
 
-__all__ = ["search", "PyArgs", "files", "PySortMode", "PySortModeKind"]
+__all__ = ["search", "files", "PySortMode", "PySortModeKind"]

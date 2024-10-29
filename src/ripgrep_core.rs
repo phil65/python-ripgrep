@@ -196,8 +196,50 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
 
 #[pyfunction]
 #[pyo3(name = "search")]
-pub fn py_search(py_args: &PyArgs) -> PyResult<Vec<String>> {
-    let args_result = pyargs_to_hiargs(py_args, lowargs::Mode::default());
+#[pyo3(signature = (
+    patterns,
+    paths=None,
+    globs=None,
+    heading=None,
+    after_context=None,
+    before_context=None,
+    separator_field_context=None,
+    separator_field_match=None,
+    separator_context=None,
+    sort=None,
+    max_count=None,
+    line_number=None,
+))]
+pub fn py_search(
+    patterns: Vec<String>,
+    paths: Option<Vec<String>>,
+    globs: Option<Vec<String>>,
+    heading: Option<bool>,
+    after_context: Option<u64>,
+    before_context: Option<u64>,
+    separator_field_context: Option<String>,
+    separator_field_match: Option<String>,
+    separator_context: Option<String>,
+    sort: Option<PySortMode>,
+    max_count: Option<u64>,
+    line_number: Option<bool>,
+) -> PyResult<Vec<String>> {
+    let py_args = PyArgs {
+        patterns,
+        paths,
+        globs,
+        heading,
+        after_context,
+        before_context,
+        separator_field_context,
+        separator_field_match,
+        separator_context,
+        sort,
+        max_count,
+        line_number,
+    };
+
+    let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::default());
 
     if let Err(err) = args_result {
         return Err(PyValueError::new_err(err.to_string()));
@@ -265,8 +307,50 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 
 #[pyfunction]
 #[pyo3(name = "files")]
-pub fn py_files(py_args: &PyArgs) -> PyResult<Vec<String>> {
-    let args_result = pyargs_to_hiargs(py_args, lowargs::Mode::Files);
+#[pyo3(signature = (
+    patterns,
+    paths=None,
+    globs=None,
+    heading=None,
+    after_context=None,
+    before_context=None,
+    separator_field_context=None,
+    separator_field_match=None,
+    separator_context=None,
+    sort=None,
+    max_count=None,
+    line_number=None,
+))]
+pub fn py_files(
+    patterns: Vec<String>,
+    paths: Option<Vec<String>>,
+    globs: Option<Vec<String>>,
+    heading: Option<bool>,
+    after_context: Option<u64>,
+    before_context: Option<u64>,
+    separator_field_context: Option<String>,
+    separator_field_match: Option<String>,
+    separator_context: Option<String>,
+    sort: Option<PySortMode>,
+    max_count: Option<u64>,
+    line_number: Option<bool>,
+) -> PyResult<Vec<String>> {
+    let py_args = PyArgs {
+        patterns,
+        paths,
+        globs,
+        heading,
+        after_context,
+        before_context,
+        separator_field_context,
+        separator_field_match,
+        separator_context,
+        sort,
+        max_count,
+        line_number,
+    };
+
+    let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
 
     if let Err(err) = args_result {
         return Err(PyValueError::new_err(err.to_string()));
