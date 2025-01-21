@@ -211,6 +211,7 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     line_number=None,
 ))]
 pub fn py_search(
+    py: Python<'_>,
     patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
@@ -224,36 +225,38 @@ pub fn py_search(
     max_count: Option<u64>,
     line_number: Option<bool>,
 ) -> PyResult<Vec<String>> {
-    let py_args = PyArgs {
-        patterns,
-        paths,
-        globs,
-        heading,
-        after_context,
-        before_context,
-        separator_field_context,
-        separator_field_match,
-        separator_context,
-        sort,
-        max_count,
-        line_number,
-    };
+    py.allow_threads(|| {
+        let py_args = PyArgs {
+            patterns,
+            paths,
+            globs,
+            heading,
+            after_context,
+            before_context,
+            separator_field_context,
+            separator_field_match,
+            separator_context,
+            sort,
+            max_count,
+            line_number,
+        };
 
-    let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::default());
+        let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::default());
 
-    if let Err(err) = args_result {
-        return Err(PyValueError::new_err(err.to_string()));
-    }
-    
-    let args = args_result.unwrap();
+        if let Err(err) = args_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
+        
+        let args = args_result.unwrap();
 
-    let search_result = py_search_impl(&args);
+        let search_result = py_search_impl(&args);
 
-    if let Err(err) = search_result {
-        return Err(PyValueError::new_err(err.to_string()));
-    }
+        if let Err(err) = search_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
 
-    Ok(search_result.unwrap())
+        Ok(search_result.unwrap())
+    })
 }
 
 
@@ -322,6 +325,7 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     line_number=None,
 ))]
 pub fn py_files(
+    py: Python<'_>,
     patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
@@ -335,36 +339,38 @@ pub fn py_files(
     max_count: Option<u64>,
     line_number: Option<bool>,
 ) -> PyResult<Vec<String>> {
-    let py_args = PyArgs {
-        patterns,
-        paths,
-        globs,
-        heading,
-        after_context,
-        before_context,
-        separator_field_context,
-        separator_field_match,
-        separator_context,
-        sort,
-        max_count,
-        line_number,
-    };
+    py.allow_threads(|| {
+        let py_args = PyArgs {
+            patterns,
+            paths,
+            globs,
+            heading,
+            after_context,
+            before_context,
+            separator_field_context,
+            separator_field_match,
+            separator_context,
+            sort,
+            max_count,
+            line_number,
+        };
 
-    let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
+        let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
 
-    if let Err(err) = args_result {
-        return Err(PyValueError::new_err(err.to_string()));
-    }
-    
-    let args = args_result.unwrap();
+        if let Err(err) = args_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
+        
+        let args = args_result.unwrap();
 
-    let files_result = py_files_impl(&args);
+        let files_result = py_files_impl(&args);
 
-    if let Err(err) = files_result {
-        return Err(PyValueError::new_err(err.to_string()));
-    }
+        if let Err(err) = files_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
 
-    Ok(files_result.unwrap())
+        Ok(files_result.unwrap())
+    })
 }
 
 
