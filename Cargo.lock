@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "python_ripgrep"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "anyhow",
  "bstr",
