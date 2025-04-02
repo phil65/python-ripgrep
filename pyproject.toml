@@ -9,7 +9,7 @@ authors = [
 ]
 description = "A Python wrapper for ripgrep"
 name = "python-ripgrep"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = []
 
 [tool.maturin]
