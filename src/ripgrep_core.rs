@@ -295,8 +295,17 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
         if search_result.has_match() {     
             let printer = searcher.printer();
             let results_vec = printer.get_mut().borrow_mut();
-            let results_str = String::from_utf8(results_vec.get_ref().clone()).unwrap();
-            results.push(results_str.clone());
+
+            // Only include results for valid UTF-8 files
+            match String::from_utf8(results_vec.get_ref().clone()) {
+                Ok(results_str) => {
+                    results.push(results_str);
+                }
+                Err(_) => {
+                    // Skip this file as it contains invalid UTF-8 data
+                    // (likely a binary file or file with a different encoding)
+                }
+            }
 
             let p = searcher.printer().borrow_mut();
             let p_inner = p.get_mut();
