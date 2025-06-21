@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-requires-python = ">=3.8,<4.0"
+requires-python = ">=3.10,<3.13"
 authors = [
     { name = "Josh Learn", email = "josh@exponent.run" },
 ]
