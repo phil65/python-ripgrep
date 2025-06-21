@@ -1,7 +1,7 @@
 from python_ripgrep import PySortMode, PySortModeKind, files, search
 
 
-def test_search_with_kwargs():
+def test_search_with_kwargs() -> None:
     print("Testing search with keyword arguments:")
     results = search(patterns=["def"], paths=["src"], globs=["*.rs"], line_number=True)
     print(f"Found {len(results)} matches")
@@ -10,7 +10,7 @@ def test_search_with_kwargs():
     print()
 
 
-def test_files_with_kwargs():
+def test_files_with_kwargs() -> None:
     print("Testing files with keyword arguments:")
     results = files(
         patterns=[".*"],
