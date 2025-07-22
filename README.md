@@ -88,6 +88,7 @@ The following is a checklist of ripgrep flags that have been implemented in this
 - [x] `separator_field_context`: (Optional) Separator between fields in context lines
 - [x] `separator_field_match`: (Optional) Separator between fields in matching lines
 - [x] `separator_context`: (Optional) Separator between context lines
+- [x] `-U, --multiline`: Enable matching across multiple lines
 
 The following flags from ripgrep are not yet implemented in this wrapper:
 
@@ -104,7 +105,6 @@ The following flags from ripgrep are not yet implemented in this wrapper:
 - [ ] `-x, --line-regexp`: Only show matches surrounded by line boundaries
 - [ ] `-M, --max-columns`: Don't print lines longer than this limit
 - [ ] `--mmap`: Memory map searched files when possible
-- [ ] `-U, --multiline`: Enable matching across multiple lines
 - [ ] `--no-ignore`: Don't respect ignore files
 - [ ] `--no-unicode`: Disable Unicode-aware search
 - [ ] `-0, --null`: Print NUL byte after file names

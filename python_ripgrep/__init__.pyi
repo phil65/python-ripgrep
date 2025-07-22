@@ -25,6 +25,7 @@ def search(
     sort: PySortMode | None = None,
     max_count: int | None = None,
     line_number: bool | None = None,
+    multiline: bool | None = None,
 ) -> list[str]: ...
 def files(
     patterns: list[str],
@@ -39,4 +40,5 @@ def files(
     sort: PySortMode | None = None,
     max_count: int | None = None,
     line_number: bool | None = None,
+    multiline: bool | None = None,
 ) -> list[str]: ...
