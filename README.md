@@ -169,12 +169,23 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-[License information to be added]
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ## Acknowledgements
 
 This project is based on [ripgrep](https://github.com/BurntSushi/ripgrep) by Andrew Gallant.
 
+## Publishing to PyPI
+
+This package uses GitHub Actions for automated publishing. When a new release is created on GitHub, wheels are automatically built for multiple platforms (Linux, macOS, Windows) and published to PyPI.
+
+To publish a new version:
+
+1. Update version in `pyproject.toml` and `Cargo.toml`
+2. Commit and push changes
+3. Create a new GitHub release with a tag (e.g., `v0.1.0`)
+4. GitHub Actions will automatically build and publish to PyPI
+
 ---
 
-This project is built and maintained by the [Exponent](https://exponent.run) team.
+This project is maintained by [Indent](https://indent.com).
