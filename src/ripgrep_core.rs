@@ -1,15 +1,17 @@
-use std::{borrow::BorrowMut, ffi::{OsStr, OsString}};
 use hiargs::HiArgs;
-use pyo3::prelude::*;
 use pyo3::exceptions::PyValueError;
+use pyo3::prelude::*;
+use std::{
+    borrow::BorrowMut,
+    ffi::{OsStr, OsString},
+};
 
-mod search;
+mod haystack;
 mod hiargs;
 mod lowargs;
-mod haystack;
+mod search;
 #[macro_use]
 mod messages;
-
 
 #[pyclass]
 pub struct PyArgs {
@@ -26,29 +28,39 @@ pub struct PyArgs {
     pub max_count: Option<u64>,
     pub line_number: Option<bool>,
     pub multiline: Option<bool>,
+    pub case_sensitive: Option<bool>,
+    pub smart_case: Option<bool>,
+    pub no_ignore: Option<bool>,
+    pub hidden: Option<bool>,
+    pub json: Option<bool>,
 }
 
 #[pymethods]
 impl PyArgs {
     #[new]
     #[pyo3(signature = (
-        patterns, 
-        paths=None, 
-        globs=None, 
-        heading=None, 
+        patterns,
+        paths=None,
+        globs=None,
+        heading=None,
         after_context=None,
         before_context=None,
-        separator_field_context=None, 
-        separator_field_match=None, 
+        separator_field_context=None,
+        separator_field_match=None,
         separator_context=None,
         sort=None,
         max_count=None,
         line_number=None,
         multiline=None,
+        case_sensitive=None,
+        smart_case=None,
+        no_ignore=None,
+        hidden=None,
+        json=None,
     ))]
     fn new(
-        patterns: Vec<String>, 
-        paths: Option<Vec<String>>, 
+        patterns: Vec<String>,
+        paths: Option<Vec<String>>,
         globs: Option<Vec<String>>,
         heading: Option<bool>,
         after_context: Option<u64>,
@@ -60,6 +72,11 @@ impl PyArgs {
         max_count: Option<u64>,
         line_number: Option<bool>,
         multiline: Option<bool>,
+        case_sensitive: Option<bool>,
+        smart_case: Option<bool>,
+        no_ignore: Option<bool>,
+        hidden: Option<bool>,
+        json: Option<bool>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -75,10 +92,14 @@ impl PyArgs {
             max_count,
             line_number,
             multiline,
+            case_sensitive,
+            smart_case,
+            no_ignore,
+            hidden,
+            json,
         }
     }
 }
-
 
 #[pyclass(eq)]
 #[derive(PartialEq, Clone)]
@@ -92,17 +113,10 @@ pub struct PySortMode {
 impl PySortMode {
     #[new]
     #[pyo3(signature = (kind, reverse=false))]
-    fn new(
-        kind: PySortModeKind,
-        reverse: bool,
-    ) -> Self {
-        PySortMode {
-            kind,
-            reverse,
-        }
+    fn new(kind: PySortModeKind, reverse: bool) -> Self {
+        PySortMode { kind, reverse }
     }
 }
-
 
 #[pyclass(eq)]
 #[derive(PartialEq, Clone)]
@@ -115,13 +129,15 @@ pub enum PySortModeKind {
 }
 
 fn build_patterns(patterns: Vec<String>) -> Vec<lowargs::PatternSource> {
-    patterns.into_iter().map(|pattern| lowargs::PatternSource::Regexp(pattern)).collect()
+    patterns
+        .into_iter()
+        .map(|pattern| lowargs::PatternSource::Regexp(pattern))
+        .collect()
 }
 
 fn build_paths(paths: Vec<String>) -> Vec<OsString> {
     paths.into_iter().map(|path| OsString::from(path)).collect()
 }
-
 
 fn build_sort_mode_kind(kind: PySortModeKind) -> lowargs::SortModeKind {
     match kind {
@@ -134,13 +150,19 @@ fn build_sort_mode_kind(kind: PySortModeKind) -> lowargs::SortModeKind {
 
 fn build_sort_mode(sort: Option<PySortMode>) -> Option<lowargs::SortMode> {
     if let Some(sort_mode) = sort {
-        Some(lowargs::SortMode { kind: build_sort_mode_kind(sort_mode.kind), reverse: sort_mode.reverse })
+        Some(lowargs::SortMode {
+            kind: build_sort_mode_kind(sort_mode.kind),
+            reverse: sort_mode.reverse,
+        })
     } else {
         None
     }
 }
 
-fn build_context_mode(after_context: Option<u64>, before_context: Option<u64>) -> lowargs::ContextMode {
+fn build_context_mode(
+    after_context: Option<u64>,
+    before_context: Option<u64>,
+) -> lowargs::ContextMode {
     let mut context_mode = lowargs::ContextMode::default();
 
     if let Some(after) = after_context {
@@ -198,9 +220,31 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
         low_args.multiline = multiline;
     }
 
+    // Case sensitivity handling
+    if let Some(true) = py_args.smart_case {
+        low_args.case = lowargs::CaseMode::Smart;
+    } else if let Some(false) = py_args.case_sensitive {
+        low_args.case = lowargs::CaseMode::Insensitive;
+    } else if let Some(true) = py_args.case_sensitive {
+        low_args.case = lowargs::CaseMode::Sensitive;
+    }
+
+    // Ignore file handling
+    if let Some(true) = py_args.no_ignore {
+        low_args.no_ignore_dot = true;
+        low_args.no_ignore_vcs = true;
+        low_args.no_ignore_global = true;
+        low_args.no_ignore_parent = true;
+        low_args.no_ignore_files = true;
+    }
+
+    // Hidden files
+    if let Some(hidden) = py_args.hidden {
+        low_args.hidden = hidden;
+    }
+
     HiArgs::from_low_args(low_args)
 }
-
 
 #[pyfunction]
 #[pyo3(name = "search")]
@@ -218,6 +262,11 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     max_count=None,
     line_number=None,
     multiline=None,
+    case_sensitive=None,
+    smart_case=None,
+    no_ignore=None,
+    hidden=None,
+    json=None,
 ))]
 pub fn py_search(
     py: Python<'_>,
@@ -234,6 +283,11 @@ pub fn py_search(
     max_count: Option<u64>,
     line_number: Option<bool>,
     multiline: Option<bool>,
+    case_sensitive: Option<bool>,
+    smart_case: Option<bool>,
+    no_ignore: Option<bool>,
+    hidden: Option<bool>,
+    json: Option<bool>,
 ) -> PyResult<Vec<String>> {
     py.allow_threads(|| {
         let py_args = PyArgs {
@@ -250,14 +304,25 @@ pub fn py_search(
             max_count,
             line_number,
             multiline,
+            case_sensitive,
+            smart_case,
+            no_ignore,
+            hidden,
+            json,
         };
 
-        let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::default());
+        let mode = if py_args.json == Some(true) {
+            lowargs::Mode::Search(lowargs::SearchMode::JSON)
+        } else {
+            lowargs::Mode::default()
+        };
+
+        let args_result = pyargs_to_hiargs(&py_args, mode);
 
         if let Err(err) = args_result {
             return Err(PyValueError::new_err(err.to_string()));
         }
-        
+
         let args = args_result.unwrap();
 
         let search_result = py_search_impl(&args);
@@ -270,9 +335,12 @@ pub fn py_search(
     })
 }
 
-
-
 fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    // Check if JSON mode is requested
+    if let lowargs::Mode::Search(lowargs::SearchMode::JSON) = args.mode() {
+        return py_search_impl_json(args);
+    }
+
     let haystack_builder = args.haystack_builder();
     let unsorted = args
         .walk_builder()?
@@ -286,11 +354,7 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 
     let mut results = Vec::new();
 
-    let mut searcher = args.search_worker(
-        args_matcher,
-        args_searcher,
-        args_printer,
-    )?;
+    let mut searcher = args.search_worker(args_matcher, args_searcher, args_printer)?;
 
     for haystack in haystacks {
         let search_result = match searcher.search(&haystack) {
@@ -303,7 +367,7 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
             }
         };
 
-        if search_result.has_match() {     
+        if search_result.has_match() {
             let printer = searcher.printer();
             let results_vec = printer.get_mut().borrow_mut();
 
@@ -327,6 +391,55 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     Ok(results)
 }
 
+/// JSON mode search implementation
+fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    use search::PatternMatcher;
+
+    let haystack_builder = args.haystack_builder();
+    let unsorted = args
+        .walk_builder()?
+        .build()
+        .filter_map(|result| haystack_builder.build_from_result(result));
+    let haystacks = args.sort(unsorted);
+
+    let matcher = args.matcher()?;
+    let mut searcher = args.searcher()?;
+
+    let mut results = Vec::new();
+
+    for haystack in haystacks {
+        let mut printer_buf: Vec<u8> = vec![];
+
+        let search_result = {
+            let mut json_printer = args.printer_json(&mut printer_buf);
+            let path = haystack.path();
+
+            match &matcher {
+                PatternMatcher::RustRegex(m) => {
+                    let mut sink = json_printer.sink_with_path(m, path);
+                    searcher.search_path(m, path, &mut sink)
+                }
+            }
+        };
+
+        match search_result {
+            Ok(_) => {
+                if !printer_buf.is_empty() {
+                    if let Ok(s) = String::from_utf8(printer_buf) {
+                        results.push(s);
+                    }
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
+            Err(err) => {
+                err_message!("{}: {}", haystack.path().display(), err);
+                continue;
+            }
+        }
+    }
+
+    Ok(results)
+}
 
 #[pyfunction]
 #[pyo3(name = "files")]
@@ -344,6 +457,11 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     max_count=None,
     line_number=None,
     multiline=None,
+    case_sensitive=None,
+    smart_case=None,
+    no_ignore=None,
+    hidden=None,
+    json=None,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -360,6 +478,11 @@ pub fn py_files(
     max_count: Option<u64>,
     line_number: Option<bool>,
     multiline: Option<bool>,
+    case_sensitive: Option<bool>,
+    smart_case: Option<bool>,
+    no_ignore: Option<bool>,
+    hidden: Option<bool>,
+    json: Option<bool>,
 ) -> PyResult<Vec<String>> {
     py.allow_threads(|| {
         let py_args = PyArgs {
@@ -376,6 +499,11 @@ pub fn py_files(
             max_count,
             line_number,
             multiline,
+            case_sensitive,
+            smart_case,
+            no_ignore,
+            hidden,
+            json,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
@@ -383,7 +511,7 @@ pub fn py_files(
         if let Err(err) = args_result {
             return Err(PyValueError::new_err(err.to_string()));
         }
-        
+
         let args = args_result.unwrap();
 
         let files_result = py_files_impl(&args);
@@ -395,7 +523,6 @@ pub fn py_files(
         Ok(files_result.unwrap())
     })
 }
-
 
 fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     let haystack_builder = args.haystack_builder();
@@ -420,9 +547,7 @@ fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
             }
         }
 
-        let haystack_path = haystack
-            .path()
-            .to_str();
+        let haystack_path = haystack.path().to_str();
 
         if let Some(path) = haystack_path {
             matches.push(path.to_string());

@@ -26,6 +26,11 @@ def search(
     max_count: int | None = None,
     line_number: bool | None = None,
     multiline: bool | None = None,
+    case_sensitive: bool | None = None,
+    smart_case: bool | None = None,
+    no_ignore: bool | None = None,
+    hidden: bool | None = None,
+    json: bool | None = None,
 ) -> list[str]: ...
 def files(
     patterns: list[str],
@@ -41,4 +46,9 @@ def files(
     max_count: int | None = None,
     line_number: bool | None = None,
     multiline: bool | None = None,
+    case_sensitive: bool | None = None,
+    smart_case: bool | None = None,
+    no_ignore: bool | None = None,
+    hidden: bool | None = None,
+    json: bool | None = None,
 ) -> list[str]: ...

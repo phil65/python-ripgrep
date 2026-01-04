@@ -590,7 +590,7 @@ impl HiArgs {
     }
 
     /// Builds a JSON printer.
-    fn printer_json<W: std::io::Write>(
+    pub(crate) fn printer_json<W: std::io::Write>(
         &self,
         wtr: W,
     ) -> grep::printer::JSON<W> {

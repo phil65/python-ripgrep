@@ -72,6 +72,10 @@ As of now, the library implements a subset of ripgrep's functionality. The main 
 3. `globs`: File patterns to include or exclude
 4. `sort`: Sort mode for search results
 5. `max_count`: Maximum number of matches to show
+6. `case_sensitive`: Control case sensitivity
+7. `smart_case`: Enable smart case matching
+8. `no_ignore`: Disable gitignore/ignore file handling
+9. `hidden`: Search hidden files and directories
 
 ## Implemented Flags
 
@@ -89,6 +93,12 @@ The following is a checklist of ripgrep flags that have been implemented in this
 - [x] `separator_field_match`: (Optional) Separator between fields in matching lines
 - [x] `separator_context`: (Optional) Separator between context lines
 - [x] `-U, --multiline`: Enable matching across multiple lines
+- [x] `-i, --ignore-case`: Case insensitive search (via `case_sensitive=False`)
+- [x] `-s, --case-sensitive`: Case sensitive search (via `case_sensitive=True`)
+- [x] `-S, --smart-case`: Smart case search (via `smart_case=True`)
+- [x] `--no-ignore`: Don't respect ignore files (via `no_ignore=True`)
+- [x] `--hidden`: Search hidden files and directories (via `hidden=True`)
+- [x] `--json`: Output results in JSON Lines format (via `json=True`)
 
 The following flags from ripgrep are not yet implemented in this wrapper:
 
@@ -99,13 +109,11 @@ The following flags from ripgrep are not yet implemented in this wrapper:
 - [ ] `--dfa-size-limit`: Limit for regex DFA size
 - [ ] `-E, --encoding`: Specify the text encoding of files to search
 - [ ] `-F, --fixed-strings`: Treat patterns as literal strings
-- [ ] `-i, --ignore-case`: Case insensitive search
 - [ ] `-v, --invert-match`: Invert matching
 - [ ] `-n, --line-number`: Show line numbers
 - [ ] `-x, --line-regexp`: Only show matches surrounded by line boundaries
 - [ ] `-M, --max-columns`: Don't print lines longer than this limit
 - [ ] `--mmap`: Memory map searched files when possible
-- [ ] `--no-ignore`: Don't respect ignore files
 - [ ] `--no-unicode`: Disable Unicode-aware search
 - [ ] `-0, --null`: Print NUL byte after file names
 - [ ] `-o, --only-matching`: Print only matched parts of a line
@@ -113,8 +121,6 @@ The following flags from ripgrep are not yet implemented in this wrapper:
 - [ ] `-P, --pcre2`: Use the PCRE2 regex engine
 - [ ] `-p, --pretty`: Alias for --color=always --heading -n
 - [ ] `-r, --replace`: Replace matches with the given text
-- [ ] `-S, --smart-case`: Smart case search
-- [ ] `-s, --case-sensitive`: Case sensitive search
 - [ ] `--stats`: Print statistics about the search
 - [ ] `-a, --text`: Search binary files as if they were text
 - [ ] `-t, --type`: Only search files matching TYPE
