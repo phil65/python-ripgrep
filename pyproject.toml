@@ -1,6 +1,5 @@
 [project]
 name = "ripgrep-rs"
-version = "0.3.13"
 description = "A Python wrapper for ripgrep"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -23,6 +22,7 @@ classifiers = [
   "Topic :: Text Processing",
 ]
 dependencies = []
+dynamic = ["version"]
 
 [project.urls]
 Homepage = "https://github.com/phil65/python-ripgrep"
@@ -31,6 +31,11 @@ Repository = "https://github.com/phil65/python-ripgrep"
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+
+[dependency-groups]
+dev = [
+  "fsspec>=2026.1.0",
+]
 
 [build-system]
 requires = ["maturin>=1.0,<2.0"]
