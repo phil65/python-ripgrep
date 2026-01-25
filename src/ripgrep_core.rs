@@ -39,6 +39,7 @@ pub struct PyArgs {
     pub include_dirs: Option<bool>,
     pub max_depth: Option<usize>,
     pub absolute: Option<bool>,
+    pub relative_to: Option<String>,
 }
 
 #[pymethods]
@@ -66,6 +67,7 @@ impl PyArgs {
         include_dirs=None,
         max_depth=None,
         absolute=None,
+        relative_to=None,
     ))]
     fn new(
         patterns: Vec<String>,
@@ -89,6 +91,7 @@ impl PyArgs {
         include_dirs: Option<bool>,
         max_depth: Option<usize>,
         absolute: Option<bool>,
+        relative_to: Option<String>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -112,6 +115,7 @@ impl PyArgs {
             include_dirs,
             max_depth,
             absolute,
+            relative_to,
         }
     }
 }
@@ -337,6 +341,7 @@ pub fn py_search(
             include_dirs: None, // search doesn't use this
             max_depth: None,    // search doesn't use this
             absolute: None,     // search doesn't use this
+            relative_to: None,  // search doesn't use this
         };
 
         let mode = if py_args.json == Some(true) {
@@ -555,6 +560,7 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     include_dirs=None,
     max_depth=None,
     absolute=None,
+    relative_to=None,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -579,6 +585,7 @@ pub fn py_files(
     include_dirs: Option<bool>,
     max_depth: Option<usize>,
     absolute: Option<bool>,
+    relative_to: Option<String>,
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -603,6 +610,7 @@ pub fn py_files(
             include_dirs,
             max_depth,
             absolute,
+            relative_to,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
@@ -613,7 +621,11 @@ pub fn py_files(
 
         let args = args_result.unwrap();
 
-        let files_result = py_files_impl(&args, py_args.absolute.unwrap_or(false));
+        let files_result = py_files_impl(
+            &args,
+            py_args.absolute.unwrap_or(false),
+            py_args.relative_to.as_deref(),
+        );
 
         if let Err(err) = files_result {
             return Err(PyValueError::new_err(err.to_string()));
@@ -623,10 +635,14 @@ pub fn py_files(
     })
 }
 
-fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
+fn py_files_impl(
+    args: &HiArgs,
+    absolute: bool,
+    relative_to: Option<&str>,
+) -> anyhow::Result<Vec<String>> {
     // Use parallel implementation when threads > 1 and no sorting requested
     if args.threads() > 1 && args.sort_mode().is_none() {
-        return py_files_impl_parallel(args, absolute);
+        return py_files_impl_parallel(args, absolute, relative_to);
     }
 
     // Get cwd once if needed for making paths absolute
@@ -635,6 +651,15 @@ fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
     } else {
         None
     };
+
+    // Prepare prefix for relative path stripping
+    let prefix = relative_to.map(|p| {
+        let mut s = p.to_string();
+        if !s.ends_with('/') && !s.ends_with('\\') {
+            s.push('/');
+        }
+        s
+    });
 
     // Single-threaded implementation (also used when sorting is requested)
     let haystack_builder = args.haystack_builder();
@@ -660,7 +685,7 @@ fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
         }
 
         let path = haystack.path();
-        let path_str = if let Some(ref cwd) = cwd {
+        let mut path_str = if let Some(ref cwd) = cwd {
             if !path.is_absolute() {
                 cwd.join(path).to_str().map(|s| s.to_string())
             } else {
@@ -669,6 +694,13 @@ fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
         } else {
             path.to_str().map(|s| s.to_string())
         };
+
+        // Strip prefix if relative_to is set
+        if let (Some(ref mut p), Some(ref pfx)) = (&mut path_str, &prefix) {
+            if p.starts_with(pfx) {
+                *p = p[pfx.len()..].to_string();
+            }
+        }
 
         if let Some(p) = path_str {
             matches.push(p);
@@ -679,7 +711,11 @@ fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
 }
 
 /// Parallel file listing implementation
-fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
+fn py_files_impl_parallel(
+    args: &HiArgs,
+    absolute: bool,
+    relative_to: Option<&str>,
+) -> anyhow::Result<Vec<String>> {
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
@@ -690,6 +726,15 @@ fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<S
     } else {
         None
     };
+
+    // Prepare prefix for relative path stripping
+    let prefix: Option<String> = relative_to.map(|p| {
+        let mut s = p.to_string();
+        if !s.ends_with('/') && !s.ends_with('\\') {
+            s.push('/');
+        }
+        s
+    });
 
     let (tx, rx) = mpsc::channel::<String>();
 
@@ -715,6 +760,7 @@ fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<S
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
         let cwd = &cwd;
+        let prefix = &prefix;
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -723,7 +769,7 @@ fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<S
             };
 
             let path = haystack.path();
-            let path_str = if let Some(ref cwd) = cwd {
+            let mut path_str = if let Some(ref cwd) = cwd {
                 if !path.is_absolute() {
                     cwd.join(path).to_str().map(|s| s.to_string())
                 } else {
@@ -732,6 +778,13 @@ fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<S
             } else {
                 path.to_str().map(|s| s.to_string())
             };
+
+            // Strip prefix if relative_to is set
+            if let (Some(ref mut p), Some(ref pfx)) = (&mut path_str, prefix) {
+                if p.starts_with(pfx) {
+                    *p = p[pfx.len()..].to_string();
+                }
+            }
 
             if let Some(p) = path_str {
                 match tx.send(p) {

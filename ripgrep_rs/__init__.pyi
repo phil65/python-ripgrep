@@ -54,4 +54,5 @@ def files(
     include_dirs: bool | None = None,
     max_depth: int | None = None,
     absolute: bool | None = None,
+    relative_to: str | None = None,
 ) -> list[str]: ...
