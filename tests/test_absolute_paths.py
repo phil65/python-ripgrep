@@ -235,6 +235,43 @@ class TestAbsolutePaths:
             expected = {"file1.txt", "file2.txt", os.path.join("subdir", "file3.txt")}
             assert rel_paths == expected, f"Expected {expected}, got {rel_paths}"
 
+    def test_unresolved_input_path(self):
+        """Test with non-resolved input path (like upathtools fixture provides).
+
+        On Windows, tempfile.TemporaryDirectory may return short 8.3 paths like
+        C:/Users/RUNNER~1/... but files are at C:/Users/runneradmin/...
+
+        On macOS, /var is a symlink to /private/var.
+
+        The key is: when absolute=True, the returned paths should be usable
+        with os.path.relpath() against the ORIGINAL input path.
+        """
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Use Path(tmpdir) but NOT .resolve() - this is what upathtools does
+            test_dir = Path(tmpdir)
+            (test_dir / "file1.txt").write_text("content1")
+
+            # upathtools passes: str(Path(base).resolve())
+            # But the base_path used for relpath is the ORIGINAL test_dir
+            abs_base = str(test_dir.resolve())
+
+            result = files(
+                patterns=["*"],
+                paths=[abs_base],
+                absolute=True,
+            )
+
+            assert len(result) == 1
+            path = result[0]
+            assert Path(path).is_absolute(), f"Path is not absolute: {path}"
+            assert ".." not in path, f"Path contains '..': {path}"
+
+            # Key test: relative path from the RESOLVED base should work
+            rel = os.path.relpath(path, abs_base)
+            assert not rel.startswith(".."), (
+                f"Relative path escapes base: {rel} (path={path}, base={abs_base})"
+            )
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
