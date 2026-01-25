@@ -1316,10 +1316,10 @@ fn current_dir() -> anyhow::Result<PathBuf> {
         Err(err) => err,
         Ok(cwd) => return Ok(cwd),
     };
-    if let Some(cwd) = std::env::var_os("PWD") {
-        if !cwd.is_empty() {
-            return Ok(PathBuf::from(cwd));
-        }
+    if let Some(cwd) = std::env::var_os("PWD")
+        && !cwd.is_empty()
+    {
+        return Ok(PathBuf::from(cwd));
     }
     anyhow::bail!(
         "failed to get current working directory: {err}\n\

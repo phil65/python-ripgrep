@@ -472,10 +472,10 @@ fn py_search_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
                 let results_vec = printer.get_mut();
 
                 // Only include results for valid UTF-8 files
-                if let Ok(results_str) = String::from_utf8(results_vec.get_ref().clone()) {
-                    if let Ok(mut guard) = results.lock() {
-                        guard.push(results_str);
-                    }
+                if let Ok(results_str) = String::from_utf8(results_vec.get_ref().clone())
+                    && let Ok(mut guard) = results.lock()
+                {
+                    guard.push(results_str);
                 }
             }
 
@@ -519,10 +519,10 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 
         match search_result {
             Ok(_) => {
-                if !printer_buf.is_empty() {
-                    if let Ok(s) = String::from_utf8(printer_buf) {
-                        results.push(s);
-                    }
+                if !printer_buf.is_empty()
+                    && let Ok(s) = String::from_utf8(printer_buf)
+                {
+                    results.push(s);
                 }
             }
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
@@ -671,10 +671,10 @@ fn py_files_impl(
             break;
         }
 
-        if let Some(max_count) = args.max_count() {
-            if matches.len() >= max_count as usize {
-                break;
-            }
+        if let Some(max_count) = args.max_count()
+            && matches.len() >= max_count as usize
+        {
+            break;
         }
 
         let path = haystack.path();
@@ -711,10 +711,10 @@ fn py_files_impl(
         };
 
         // Strip prefix if relative_to is set
-        if let (Some(p), Some(pfx)) = (&mut path_str, &prefix) {
-            if p.starts_with(pfx) {
-                *p = p[pfx.len()..].to_string();
-            }
+        if let (Some(p), Some(pfx)) = (&mut path_str, &prefix)
+            && p.starts_with(pfx)
+        {
+            *p = p[pfx.len()..].to_string();
         }
 
         if let Some(p) = path_str {
@@ -754,10 +754,10 @@ fn py_files_impl_parallel(
             if quit_after_match {
                 break;
             }
-            if let Some(max) = max_count {
-                if results.len() >= max as usize {
-                    break;
-                }
+            if let Some(max) = max_count
+                && results.len() >= max as usize
+            {
+                break;
             }
         }
         results
@@ -768,7 +768,6 @@ fn py_files_impl_parallel(
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
         let prefix = &prefix;
-        let absolute = absolute; // Capture the absolute flag
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -810,10 +809,10 @@ fn py_files_impl_parallel(
             };
 
             // Strip prefix if relative_to is set
-            if let (Some(p), Some(pfx)) = (&mut path_str, prefix) {
-                if p.starts_with(pfx) {
-                    *p = p[pfx.len()..].to_string();
-                }
+            if let (Some(p), Some(pfx)) = (&mut path_str, prefix)
+                && p.starts_with(pfx)
+            {
+                *p = p[pfx.len()..].to_string();
             }
 
             if let Some(p) = path_str {
