@@ -705,6 +705,16 @@ fn py_files_impl(
                     }
                     Some(normalized)
                 })
+                .map(|p| {
+                    // On Windows, canonicalize returns \\?\ prefix which breaks os.path.relpath
+                    // Strip it to return a normal path
+                    let s = p.to_string_lossy();
+                    if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                        std::path::PathBuf::from(stripped)
+                    } else {
+                        p
+                    }
+                })
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
         } else {
             path.to_str().map(|s| s.to_string())
@@ -802,6 +812,16 @@ fn py_files_impl_parallel(
                             }
                         }
                         Some(normalized)
+                    })
+                    .map(|p| {
+                        // On Windows, canonicalize returns \\?\ prefix which breaks os.path.relpath
+                        // Strip it to return a normal path
+                        let s = p.to_string_lossy();
+                        if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                            std::path::PathBuf::from(stripped)
+                        } else {
+                            p
+                        }
                     })
                     .and_then(|p| p.to_str().map(|s| s.to_string()))
             } else {
