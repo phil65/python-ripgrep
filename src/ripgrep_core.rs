@@ -685,7 +685,7 @@ fn py_files_impl(
         }
 
         let path = haystack.path();
-        let mut path_str = if let Some(ref cwd) = cwd {
+        let mut path_str = if let Some(cwd) = &cwd {
             // Use canonicalize-like behavior: join then normalize
             // On Windows, ripgrep may return paths with ..\..\.. which need resolution
             let joined = cwd.join(path);
@@ -707,7 +707,7 @@ fn py_files_impl(
         };
 
         // Strip prefix if relative_to is set
-        if let (Some(ref mut p), Some(ref pfx)) = (&mut path_str, &prefix) {
+        if let (Some(p), Some(pfx)) = (&mut path_str, &prefix) {
             if p.starts_with(pfx) {
                 *p = p[pfx.len()..].to_string();
             }
@@ -780,7 +780,7 @@ fn py_files_impl_parallel(
             };
 
             let path = haystack.path();
-            let mut path_str = if let Some(ref cwd) = cwd {
+            let mut path_str = if let Some(cwd) = &cwd {
                 // Use canonicalize-like behavior: join then normalize
                 // On Windows, ripgrep may return paths with ..\\..\\.. which need resolution
                 let joined = cwd.join(path);
@@ -802,7 +802,7 @@ fn py_files_impl_parallel(
             };
 
             // Strip prefix if relative_to is set
-            if let (Some(ref mut p), Some(ref pfx)) = (&mut path_str, prefix) {
+            if let (Some(p), Some(pfx)) = (&mut path_str, prefix) {
                 if p.starts_with(pfx) {
                     *p = p[pfx.len()..].to_string();
                 }
