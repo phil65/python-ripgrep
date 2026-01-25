@@ -681,7 +681,14 @@ fn py_files_impl(
         let mut path_str = if absolute {
             // Use canonicalize for reliable absolute paths across all platforms
             // This handles symlinks, .., and platform-specific quirks (macOS /private, Windows UNC)
-            path.canonicalize()
+            // If path is relative, join with cwd first so canonicalize can resolve it
+            let full_path = if path.is_absolute() {
+                path.to_path_buf()
+            } else {
+                std::env::current_dir().unwrap_or_default().join(path)
+            };
+            full_path
+                .canonicalize()
                 .ok()
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
         } else {
@@ -746,6 +753,7 @@ fn py_files_impl_parallel(
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
         let prefix = &prefix;
+        let absolute = absolute; // Capture the absolute flag
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -756,7 +764,14 @@ fn py_files_impl_parallel(
             let path = haystack.path();
             let mut path_str = if absolute {
                 // Use canonicalize for reliable absolute paths across all platforms
-                path.canonicalize()
+                // If path is relative, join with cwd first so canonicalize can resolve it
+                let full_path = if path.is_absolute() {
+                    path.to_path_buf()
+                } else {
+                    std::env::current_dir().unwrap_or_default().join(path)
+                };
+                full_path
+                    .canonicalize()
                     .ok()
                     .and_then(|p| p.to_str().map(|s| s.to_string()))
             } else {
