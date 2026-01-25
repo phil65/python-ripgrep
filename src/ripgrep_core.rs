@@ -686,11 +686,22 @@ fn py_files_impl(
 
         let path = haystack.path();
         let mut path_str = if let Some(ref cwd) = cwd {
-            if !path.is_absolute() {
-                cwd.join(path).to_str().map(|s| s.to_string())
-            } else {
-                path.to_str().map(|s| s.to_string())
+            // Use canonicalize-like behavior: join then normalize
+            // On Windows, ripgrep may return paths with ..\..\.. which need resolution
+            let joined = cwd.join(path);
+            // Use components to normalize the path (resolve . and ..)
+            use std::path::Component;
+            let mut normalized = std::path::PathBuf::new();
+            for component in joined.components() {
+                match component {
+                    Component::ParentDir => {
+                        normalized.pop();
+                    }
+                    Component::CurDir => {}
+                    _ => normalized.push(component),
+                }
             }
+            normalized.to_str().map(|s| s.to_string())
         } else {
             path.to_str().map(|s| s.to_string())
         };
@@ -770,11 +781,22 @@ fn py_files_impl_parallel(
 
             let path = haystack.path();
             let mut path_str = if let Some(ref cwd) = cwd {
-                if !path.is_absolute() {
-                    cwd.join(path).to_str().map(|s| s.to_string())
-                } else {
-                    path.to_str().map(|s| s.to_string())
+                // Use canonicalize-like behavior: join then normalize
+                // On Windows, ripgrep may return paths with ..\\..\\.. which need resolution
+                let joined = cwd.join(path);
+                // Use components to normalize the path (resolve . and ..)
+                use std::path::Component;
+                let mut normalized = std::path::PathBuf::new();
+                for component in joined.components() {
+                    match component {
+                        Component::ParentDir => {
+                            normalized.pop();
+                        }
+                        Component::CurDir => {}
+                        _ => normalized.push(component),
+                    }
                 }
+                normalized.to_str().map(|s| s.to_string())
             } else {
                 path.to_str().map(|s| s.to_string())
             };
