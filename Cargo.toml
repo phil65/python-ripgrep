@@ -1,6 +1,6 @@
 [package]
 name = "ripgrep_rs"
-version = "0.3.7"
+version = "0.3.8"
 edition = "2021"
 
 [lib]
@@ -10,12 +10,12 @@ name = "ripgrep_rs"
 [dependencies]
 anyhow = "1.0"
 bstr = "1.12"
-# Dependencies for ripgrep_core (grep ecosystem versions are tightly coupled)
+# Dependencies for ripgrep_core
 glob = "0.3"
-grep = "0.3"
+grep = "0.4"
 grep-cli = "0.1"
 grep-matcher = "0.1"
-grep-printer = "0.2"
+grep-printer = "0.3"
 grep-regex = "0.1"
 grep-searcher = "0.1"
 ignore = "0.4"

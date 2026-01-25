@@ -561,7 +561,7 @@ impl HiArgs {
         wtr: W,
     ) -> Printer<W> {
         let summary_kind = if self.quiet {
-            SummaryKind::Quiet
+            SummaryKind::QuietWithMatch
         } else {
             match search_mode {
                 SearchMode::FilesWithMatches => SummaryKind::PathWithMatch,
@@ -586,7 +586,6 @@ impl HiArgs {
     pub(crate) fn printer_json<W: std::io::Write>(&self, wtr: W) -> grep::printer::JSON<W> {
         grep::printer::JSONBuilder::new()
             .pretty(false)
-            .max_matches(self.max_count)
             .always_begin_end(false)
             .build(wtr)
     }
@@ -606,7 +605,6 @@ impl HiArgs {
             .hyperlink(self.hyperlink_config.clone())
             .max_columns_preview(self.max_columns_preview)
             .max_columns(self.max_columns)
-            .max_matches(self.max_count)
             .only_matching(self.only_matching)
             .path(self.with_filename)
             .path_terminator(self.path_terminator.clone())
@@ -642,7 +640,6 @@ impl HiArgs {
             .hyperlink(self.hyperlink_config.clone())
             .max_columns_preview(self.max_columns_preview)
             .max_columns(self.max_columns)
-            .max_matches(self.max_count)
             .only_matching(self.only_matching)
             .path(self.with_filename)
             .path_terminator(self.path_terminator.clone())
@@ -678,7 +675,6 @@ impl HiArgs {
             .exclude_zero(!self.include_zero)
             .hyperlink(self.hyperlink_config.clone())
             .kind(kind)
-            .max_matches(self.max_count)
             .path(self.with_filename)
             .path_terminator(self.path_terminator.clone())
             .separator_field(b":".to_vec())
