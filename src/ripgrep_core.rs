@@ -4,9 +4,11 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::{
     borrow::BorrowMut,
+    collections::HashMap,
     ffi::{OsStr, OsString},
     sync::mpsc,
     thread,
+    time::UNIX_EPOCH,
 };
 
 mod haystack;
@@ -118,6 +120,44 @@ impl PyArgs {
             relative_to,
         }
     }
+}
+
+/// File information returned by files_with_info
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct FileInfo {
+    /// Full path to the file
+    pub name: String,
+    /// File size in bytes
+    pub size: u64,
+    /// File type: "file" or "directory"
+    #[pyo3(name = "type")]
+    pub file_type: String,
+    /// Creation time as Unix timestamp (may equal mtime on some platforms)
+    pub created: f64,
+    /// Whether the file is a symlink
+    pub islink: bool,
+    /// File mode/permissions
+    pub mode: u32,
+    /// User ID (Unix only, 0 on Windows)
+    #[cfg(unix)]
+    pub uid: u32,
+    #[cfg(not(unix))]
+    pub uid: u32,
+    /// Group ID (Unix only, 0 on Windows)
+    #[cfg(unix)]
+    pub gid: u32,
+    #[cfg(not(unix))]
+    pub gid: u32,
+    /// Modification time as Unix timestamp
+    pub mtime: f64,
+    /// Inode number (Unix only, 0 on Windows)
+    #[cfg(unix)]
+    pub ino: u64,
+    #[cfg(not(unix))]
+    pub ino: u64,
+    /// Number of hard links
+    pub nlink: u64,
 }
 
 #[pyclass(eq)]
@@ -843,6 +883,283 @@ fn py_files_impl_parallel(
             } else {
                 WalkState::Continue
             }
+        })
+    });
+
+    // Drop the original sender so collector thread can finish
+    drop(tx);
+
+    // Collect results
+    Ok(collector.join().unwrap())
+}
+
+/// Helper to normalize a path (make absolute, resolve symlinks, strip Windows prefix)
+fn normalize_path(path: &std::path::Path, absolute: bool) -> Option<String> {
+    if absolute {
+        let full_path = if path.is_absolute() {
+            path.to_path_buf()
+        } else {
+            std::env::current_dir().unwrap_or_default().join(path)
+        };
+
+        full_path
+            .canonicalize()
+            .ok()
+            .or_else(|| {
+                use std::path::Component;
+                let mut normalized = std::path::PathBuf::new();
+                for component in full_path.components() {
+                    match component {
+                        Component::ParentDir => {
+                            normalized.pop();
+                        }
+                        Component::CurDir => {}
+                        _ => normalized.push(component),
+                    }
+                }
+                Some(normalized)
+            })
+            .map(|p| {
+                let s = p.to_string_lossy();
+                if let Some(stripped) = s.strip_prefix(r"\\?\") {
+                    std::path::PathBuf::from(stripped)
+                } else {
+                    p
+                }
+            })
+            .and_then(|p| p.to_str().map(|s| s.to_string()))
+    } else {
+        path.to_str().map(|s| s.to_string())
+    }
+}
+
+/// Helper to create FileInfo from path and metadata
+fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo {
+    let mtime = metadata
+        .modified()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(0.0);
+
+    let created = metadata
+        .created()
+        .ok()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs_f64())
+        .unwrap_or(mtime); // Fall back to mtime if created not available
+
+    let file_type = if metadata.is_dir() {
+        "directory".to_string()
+    } else {
+        "file".to_string()
+    };
+
+    #[cfg(unix)]
+    let (mode, uid, gid, ino, nlink) = {
+        use std::os::unix::fs::MetadataExt;
+        (
+            metadata.mode(),
+            metadata.uid(),
+            metadata.gid(),
+            metadata.ino(),
+            metadata.nlink(),
+        )
+    };
+
+    #[cfg(not(unix))]
+    let (mode, uid, gid, ino, nlink) = {
+        // On Windows, we don't have these Unix-specific fields
+        let mode = if metadata.permissions().readonly() {
+            0o444
+        } else {
+            0o644
+        };
+        (mode, 0u32, 0u32, 0u64, 1u64)
+    };
+
+    FileInfo {
+        name: path_str,
+        size: metadata.len(),
+        file_type,
+        created,
+        islink: metadata.is_symlink(),
+        mode,
+        uid,
+        gid,
+        mtime,
+        ino,
+        nlink,
+    }
+}
+
+#[pyfunction]
+#[pyo3(name = "files_with_info")]
+#[pyo3(signature = (
+    patterns,
+    paths=None,
+    globs=None,
+    sort=None,
+    no_ignore=None,
+    hidden=None,
+    include_dirs=None,
+    max_depth=None,
+    absolute=None,
+))]
+pub fn py_files_with_info(
+    py: Python<'_>,
+    patterns: Vec<String>,
+    paths: Option<Vec<String>>,
+    globs: Option<Vec<String>>,
+    sort: Option<PySortMode>,
+    no_ignore: Option<bool>,
+    hidden: Option<bool>,
+    include_dirs: Option<bool>,
+    max_depth: Option<usize>,
+    absolute: Option<bool>,
+) -> PyResult<HashMap<String, FileInfo>> {
+    py.detach(|| {
+        let py_args = PyArgs {
+            patterns,
+            paths,
+            globs,
+            heading: None,
+            after_context: None,
+            before_context: None,
+            separator_field_context: None,
+            separator_field_match: None,
+            separator_context: None,
+            sort,
+            max_count: None,
+            line_number: None,
+            multiline: None,
+            case_sensitive: None,
+            smart_case: None,
+            no_ignore,
+            hidden,
+            json: None,
+            include_dirs,
+            max_depth,
+            absolute,
+            relative_to: None,
+        };
+
+        let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
+
+        if let Err(err) = args_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
+
+        let args = args_result.unwrap();
+        let absolute = py_args.absolute.unwrap_or(false);
+
+        let files_result = py_files_with_info_impl(&args, absolute);
+
+        if let Err(err) = files_result {
+            return Err(PyValueError::new_err(err.to_string()));
+        }
+
+        Ok(files_result.unwrap())
+    })
+}
+
+fn py_files_with_info_impl(
+    args: &HiArgs,
+    absolute: bool,
+) -> anyhow::Result<HashMap<String, FileInfo>> {
+    // Use parallel implementation when threads > 1 and no sorting requested
+    if args.threads() > 1 && args.sort_mode().is_none() {
+        return py_files_with_info_impl_parallel(args, absolute);
+    }
+
+    // Single-threaded implementation
+    let haystack_builder = args.haystack_builder();
+    let walk_builder = args.walk_builder()?;
+
+    let unsorted = walk_builder
+        .build()
+        .filter_map(|result| haystack_builder.build_from_result(result));
+
+    let haystacks = args.sort(unsorted);
+
+    let mut results = HashMap::new();
+
+    for haystack in haystacks {
+        if args.quit_after_match() {
+            break;
+        }
+
+        if let Some(max_count) = args.max_count()
+            && results.len() >= max_count as usize
+        {
+            break;
+        }
+
+        let path = haystack.path();
+        if let Some(path_str) = normalize_path(path, absolute) {
+            // Get metadata for the file
+            if let Ok(metadata) = std::fs::metadata(path) {
+                let info = create_file_info(path_str.clone(), &metadata);
+                results.insert(path_str, info);
+            }
+        }
+    }
+
+    Ok(results)
+}
+
+/// Parallel file listing with info implementation
+fn py_files_with_info_impl_parallel(
+    args: &HiArgs,
+    absolute: bool,
+) -> anyhow::Result<HashMap<String, FileInfo>> {
+    let haystack_builder = args.haystack_builder();
+    let max_count = args.max_count();
+    let quit_after_match = args.quit_after_match();
+
+    let (tx, rx) = mpsc::channel::<(String, FileInfo)>();
+
+    // Spawn collector thread
+    let collector = thread::spawn(move || -> HashMap<String, FileInfo> {
+        let mut results = HashMap::new();
+        for (path, info) in rx.iter() {
+            results.insert(path, info);
+            if quit_after_match {
+                break;
+            }
+            if let Some(max) = max_count
+                && results.len() >= max as usize
+            {
+                break;
+            }
+        }
+        results
+    });
+
+    // Parallel directory walk
+    args.walk_builder()?.build_parallel().run(|| {
+        let haystack_builder = &haystack_builder;
+        let tx = tx.clone();
+
+        Box::new(move |result| {
+            let haystack = match haystack_builder.build_from_result(result) {
+                Some(haystack) => haystack,
+                None => return WalkState::Continue,
+            };
+
+            let path = haystack.path();
+            if let Some(path_str) = normalize_path(path, absolute) {
+                // Get metadata for the file
+                if let Ok(metadata) = std::fs::metadata(path) {
+                    let info = create_file_info(path_str.clone(), &metadata);
+                    match tx.send((path_str, info)) {
+                        Ok(_) => return WalkState::Continue,
+                        Err(_) => return WalkState::Quit,
+                    }
+                }
+            }
+
+            WalkState::Continue
         })
     });
 

@@ -275,3 +275,110 @@ class TestAbsolutePaths:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestFilesWithInfo:
+    """Tests for files_with_info function."""
+
+    def test_files_with_info_basic(self):
+        """Basic test: files_with_info returns dict with FileInfo objects."""
+        from ripgrep_rs import FileInfo, files_with_info
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            test_file = tmppath / "file1.txt"
+            test_file.write_text("content1")
+
+            result = files_with_info(
+                patterns=["*"],
+                paths=[str(tmppath)],
+                absolute=True,
+            )
+
+            assert len(result) == 1
+            path, info = next(iter(result.items()))
+
+            # Check path is absolute
+            assert Path(path).is_absolute()
+            assert ".." not in path
+
+            # Check FileInfo attributes
+            assert isinstance(info, FileInfo)
+            assert info.name == path
+            assert info.size == len("content1")
+            assert info.type == "file"
+            assert info.mtime > 0
+            assert info.islink is False
+
+    def test_files_with_info_multiple_files(self):
+        """Test files_with_info with multiple files."""
+        from ripgrep_rs import files_with_info
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "file1.txt").write_text("a")
+            (tmppath / "file2.txt").write_text("bb")
+            (tmppath / "file3.txt").write_text("ccc")
+
+            result = files_with_info(
+                patterns=["*"],
+                paths=[str(tmppath)],
+                globs=["*.txt"],
+                absolute=True,
+            )
+
+            assert len(result) == 3
+
+            # Check sizes match content
+            sizes = {info.size for info in result.values()}
+            assert sizes == {1, 2, 3}
+
+    def test_files_with_info_matches_fsspec_format(self):
+        """Test that FileInfo has all fields expected by fsspec."""
+        from ripgrep_rs import files_with_info
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "test.txt").write_text("test content")
+
+            result = files_with_info(
+                patterns=["*"],
+                paths=[str(tmppath)],
+                absolute=True,
+            )
+
+            info = next(iter(result.values()))
+
+            # All fsspec fields should be present
+            assert hasattr(info, "name")
+            assert hasattr(info, "size")
+            assert hasattr(info, "type")
+            assert hasattr(info, "created")
+            assert hasattr(info, "islink")
+            assert hasattr(info, "mode")
+            assert hasattr(info, "uid")
+            assert hasattr(info, "gid")
+            assert hasattr(info, "mtime")
+            assert hasattr(info, "ino")
+            assert hasattr(info, "nlink")
+
+    def test_files_with_info_with_glob(self):
+        """Test files_with_info with glob patterns."""
+        from ripgrep_rs import files_with_info
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            (tmppath / "file.py").write_text("python")
+            (tmppath / "file.txt").write_text("text")
+            (tmppath / "file.rs").write_text("rust")
+
+            result = files_with_info(
+                patterns=["*"],
+                paths=[str(tmppath)],
+                globs=["*.py"],
+                absolute=True,
+            )
+
+            assert len(result) == 1
+            path = next(iter(result.keys()))
+            assert path.endswith(".py")
