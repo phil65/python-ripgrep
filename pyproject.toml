@@ -3,7 +3,7 @@ requires = ["maturin>=1.0,<2.0"]
 build-backend = "maturin"
 
 [project]
-requires-python = ">=3.10,<3.13"
+requires-python = ">=3.10"
 authors = [
     { name = "Josh Learn", email = "josh@exponent.run" },
     { name = "Indent", email = "noreply@indent.com" },
@@ -16,22 +16,23 @@ classifiers = [
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Programming Language :: Rust",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Text Processing",
 ]
 description = "A Python wrapper for ripgrep"
-name = "python-ripgrep"
-version = "0.1.0"
+name = "ripgrep-rs"
+version = "0.2.0"
 dependencies = []
 readme = "README.md"
 license = { file = "LICENSE" }
 keywords = ["ripgrep", "rg", "search", "grep", "regex", "rust"]
 
 [project.urls]
-Homepage = "https://github.com/indent-com/python-ripgrep"
-Repository = "https://github.com/indent-com/python-ripgrep"
-Issues = "https://github.com/indent-com/python-ripgrep/issues"
+Homepage = "https://github.com/phil65/python-ripgrep"
+Repository = "https://github.com/phil65/python-ripgrep"
+Issues = "https://github.com/phil65/python-ripgrep/issues"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]
