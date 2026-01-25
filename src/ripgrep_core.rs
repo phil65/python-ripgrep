@@ -679,17 +679,32 @@ fn py_files_impl(
 
         let path = haystack.path();
         let mut path_str = if absolute {
-            // Use canonicalize for reliable absolute paths across all platforms
-            // This handles symlinks, .., and platform-specific quirks (macOS /private, Windows UNC)
-            // If path is relative, join with cwd first so canonicalize can resolve it
+            // Make path absolute, handling relative paths with .. components
             let full_path = if path.is_absolute() {
                 path.to_path_buf()
             } else {
                 std::env::current_dir().unwrap_or_default().join(path)
             };
+
+            // Try canonicalize first (resolves symlinks), fall back to manual normalization
             full_path
                 .canonicalize()
                 .ok()
+                .or_else(|| {
+                    // Manual normalization: resolve . and .. components
+                    use std::path::Component;
+                    let mut normalized = std::path::PathBuf::new();
+                    for component in full_path.components() {
+                        match component {
+                            Component::ParentDir => {
+                                normalized.pop();
+                            }
+                            Component::CurDir => {}
+                            _ => normalized.push(component),
+                        }
+                    }
+                    Some(normalized)
+                })
                 .and_then(|p| p.to_str().map(|s| s.to_string()))
         } else {
             path.to_str().map(|s| s.to_string())
@@ -763,16 +778,32 @@ fn py_files_impl_parallel(
 
             let path = haystack.path();
             let mut path_str = if absolute {
-                // Use canonicalize for reliable absolute paths across all platforms
-                // If path is relative, join with cwd first so canonicalize can resolve it
+                // Make path absolute, handling relative paths with .. components
                 let full_path = if path.is_absolute() {
                     path.to_path_buf()
                 } else {
                     std::env::current_dir().unwrap_or_default().join(path)
                 };
+
+                // Try canonicalize first (resolves symlinks), fall back to manual normalization
                 full_path
                     .canonicalize()
                     .ok()
+                    .or_else(|| {
+                        // Manual normalization: resolve . and .. components
+                        use std::path::Component;
+                        let mut normalized = std::path::PathBuf::new();
+                        for component in full_path.components() {
+                            match component {
+                                Component::ParentDir => {
+                                    normalized.pop();
+                                }
+                                Component::CurDir => {}
+                                _ => normalized.push(component),
+                            }
+                        }
+                        Some(normalized)
+                    })
                     .and_then(|p| p.to_str().map(|s| s.to_string()))
             } else {
                 path.to_str().map(|s| s.to_string())

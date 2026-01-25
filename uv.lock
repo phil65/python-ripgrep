@@ -4,5 +4,5 @@ requires-python = ">=3.12"
 
 [[package]]
 name = "ripgrep-rs"
-version = "0.3.9"
+version = "0.3.11"
 source = { editable = "." }
