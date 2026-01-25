@@ -37,6 +37,7 @@ pub struct PyArgs {
     pub hidden: Option<bool>,
     pub json: Option<bool>,
     pub include_dirs: Option<bool>,
+    pub max_depth: Option<usize>,
 }
 
 #[pymethods]
@@ -62,6 +63,7 @@ impl PyArgs {
         hidden=None,
         json=None,
         include_dirs=None,
+        max_depth=None,
     ))]
     fn new(
         patterns: Vec<String>,
@@ -83,6 +85,7 @@ impl PyArgs {
         hidden: Option<bool>,
         json: Option<bool>,
         include_dirs: Option<bool>,
+        max_depth: Option<usize>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -104,6 +107,7 @@ impl PyArgs {
             hidden,
             json,
             include_dirs,
+            max_depth,
         }
     }
 }
@@ -255,6 +259,11 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
         low_args.include_dirs = include_dirs;
     }
 
+    // Max directory depth
+    if let Some(max_depth) = py_args.max_depth {
+        low_args.max_depth = Some(max_depth);
+    }
+
     HiArgs::from_low_args(low_args)
 }
 
@@ -322,6 +331,7 @@ pub fn py_search(
             hidden,
             json,
             include_dirs: None, // search doesn't use this
+            max_depth: None,    // search doesn't use this
         };
 
         let mode = if py_args.json == Some(true) {
@@ -538,6 +548,7 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     hidden=None,
     json=None,
     include_dirs=None,
+    max_depth=None,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -560,6 +571,7 @@ pub fn py_files(
     hidden: Option<bool>,
     json: Option<bool>,
     include_dirs: Option<bool>,
+    max_depth: Option<usize>,
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -582,6 +594,7 @@ pub fn py_files(
             hidden,
             json,
             include_dirs,
+            max_depth,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);

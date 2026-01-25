@@ -52,4 +52,5 @@ def files(
     hidden: bool | None = None,
     json: bool | None = None,
     include_dirs: bool | None = None,
+    max_depth: int | None = None,
 ) -> list[str]: ...
