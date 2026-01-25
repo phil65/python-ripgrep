@@ -1,9 +1,12 @@
 use hiargs::HiArgs;
+use ignore::WalkState;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::{
     borrow::BorrowMut,
     ffi::{OsStr, OsString},
+    sync::mpsc,
+    thread,
 };
 
 mod haystack;
@@ -341,6 +344,12 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
         return py_search_impl_json(args);
     }
 
+    // Use parallel implementation when threads > 1 and no sorting requested
+    if args.threads() > 1 && args.sort_mode().is_none() {
+        return py_search_impl_parallel(args);
+    }
+
+    // Single-threaded implementation (also used when sorting is requested)
     let haystack_builder = args.haystack_builder();
     let unsorted = args
         .walk_builder()?
@@ -389,6 +398,62 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     }
 
     Ok(results)
+}
+
+/// Parallel search implementation
+fn py_search_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    use std::sync::Mutex;
+
+    let haystack_builder = args.haystack_builder();
+    let results = Mutex::new(Vec::new());
+
+    let searcher = args.search_worker(
+        args.matcher()?,
+        args.searcher()?,
+        args.printer_no_color(vec![]),
+    )?;
+
+    args.walk_builder()?.build_parallel().run(|| {
+        let haystack_builder = &haystack_builder;
+        let results = &results;
+        let mut searcher = searcher.clone();
+
+        Box::new(move |result| {
+            let haystack = match haystack_builder.build_from_result(result) {
+                Some(haystack) => haystack,
+                None => return WalkState::Continue,
+            };
+
+            // Clear the printer buffer for this file
+            searcher.printer().get_mut().get_mut().clear();
+
+            let search_result = match searcher.search(&haystack) {
+                Ok(search_result) => search_result,
+                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                    return WalkState::Quit;
+                }
+                Err(_) => {
+                    return WalkState::Continue;
+                }
+            };
+
+            if search_result.has_match() {
+                let printer = searcher.printer();
+                let results_vec = printer.get_mut();
+
+                // Only include results for valid UTF-8 files
+                if let Ok(results_str) = String::from_utf8(results_vec.get_ref().clone()) {
+                    if let Ok(mut guard) = results.lock() {
+                        guard.push(results_str);
+                    }
+                }
+            }
+
+            WalkState::Continue
+        })
+    });
+
+    Ok(results.into_inner().unwrap())
 }
 
 /// JSON mode search implementation
@@ -525,6 +590,12 @@ pub fn py_files(
 }
 
 fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    // Use parallel implementation when threads > 1 and no sorting requested
+    if args.threads() > 1 && args.sort_mode().is_none() {
+        return py_files_impl_parallel(args);
+    }
+
+    // Single-threaded implementation (also used when sorting is requested)
     let haystack_builder = args.haystack_builder();
     let walk_builder = args.walk_builder()?;
 
@@ -555,4 +626,58 @@ fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     }
 
     Ok(matches)
+}
+
+/// Parallel file listing implementation
+fn py_files_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    let haystack_builder = args.haystack_builder();
+    let max_count = args.max_count();
+    let quit_after_match = args.quit_after_match();
+
+    let (tx, rx) = mpsc::channel::<String>();
+
+    // Spawn collector thread
+    let collector = thread::spawn(move || -> Vec<String> {
+        let mut results = Vec::new();
+        for path in rx.iter() {
+            results.push(path);
+            if quit_after_match {
+                break;
+            }
+            if let Some(max) = max_count {
+                if results.len() >= max as usize {
+                    break;
+                }
+            }
+        }
+        results
+    });
+
+    // Parallel directory walk
+    args.walk_builder()?.build_parallel().run(|| {
+        let haystack_builder = &haystack_builder;
+        let tx = tx.clone();
+
+        Box::new(move |result| {
+            let haystack = match haystack_builder.build_from_result(result) {
+                Some(haystack) => haystack,
+                None => return WalkState::Continue,
+            };
+
+            if let Some(path) = haystack.path().to_str() {
+                match tx.send(path.to_string()) {
+                    Ok(_) => WalkState::Continue,
+                    Err(_) => WalkState::Quit,
+                }
+            } else {
+                WalkState::Continue
+            }
+        })
+    });
+
+    // Drop the original sender so collector thread can finish
+    drop(tx);
+
+    // Collect results
+    Ok(collector.join().unwrap())
 }
