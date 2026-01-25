@@ -1,9 +1,9 @@
 use pyo3::prelude::*;
 
 mod ripgrep_core;
-use ripgrep_core::{py_search, py_files, PySortMode, PySortModeKind};
+use ripgrep_core::{py_files, py_search, PySortMode, PySortModeKind};
 
-#[pymodule]
+#[pymodule(gil_used = false)]
 fn ripgrep_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PySortMode>()?;
     m.add_class::<PySortModeKind>()?;

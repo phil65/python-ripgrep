@@ -36,6 +36,7 @@ pub struct PyArgs {
     pub no_ignore: Option<bool>,
     pub hidden: Option<bool>,
     pub json: Option<bool>,
+    pub include_dirs: Option<bool>,
 }
 
 #[pymethods]
@@ -60,6 +61,7 @@ impl PyArgs {
         no_ignore=None,
         hidden=None,
         json=None,
+        include_dirs=None,
     ))]
     fn new(
         patterns: Vec<String>,
@@ -80,6 +82,7 @@ impl PyArgs {
         no_ignore: Option<bool>,
         hidden: Option<bool>,
         json: Option<bool>,
+        include_dirs: Option<bool>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -100,6 +103,7 @@ impl PyArgs {
             no_ignore,
             hidden,
             json,
+            include_dirs,
         }
     }
 }
@@ -246,6 +250,11 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
         low_args.hidden = hidden;
     }
 
+    // Include directories in results
+    if let Some(include_dirs) = py_args.include_dirs {
+        low_args.include_dirs = include_dirs;
+    }
+
     HiArgs::from_low_args(low_args)
 }
 
@@ -292,7 +301,7 @@ pub fn py_search(
     hidden: Option<bool>,
     json: Option<bool>,
 ) -> PyResult<Vec<String>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let py_args = PyArgs {
             patterns,
             paths,
@@ -312,6 +321,7 @@ pub fn py_search(
             no_ignore,
             hidden,
             json,
+            include_dirs: None, // search doesn't use this
         };
 
         let mode = if py_args.json == Some(true) {
@@ -527,6 +537,7 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     no_ignore=None,
     hidden=None,
     json=None,
+    include_dirs=None,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -548,8 +559,9 @@ pub fn py_files(
     no_ignore: Option<bool>,
     hidden: Option<bool>,
     json: Option<bool>,
+    include_dirs: Option<bool>,
 ) -> PyResult<Vec<String>> {
-    py.allow_threads(|| {
+    py.detach(|| {
         let py_args = PyArgs {
             patterns,
             paths,
@@ -569,6 +581,7 @@ pub fn py_files(
             no_ignore,
             hidden,
             json,
+            include_dirs,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);

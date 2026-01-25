@@ -11,18 +11,22 @@ level logic around it.
 
 use std::path::Path;
 
-use crate::{ignore_message, err_message, message, eprintln_locked};
+use crate::{eprintln_locked, err_message, ignore_message, message};
 
 /// A builder for constructing things to search over.
 #[derive(Clone, Debug)]
 pub(crate) struct HaystackBuilder {
     strip_dot_prefix: bool,
+    include_dirs: bool,
 }
 
 impl HaystackBuilder {
     /// Return a new haystack builder with a default configuration.
     pub(crate) fn new() -> HaystackBuilder {
-        HaystackBuilder { strip_dot_prefix: false }
+        HaystackBuilder {
+            strip_dot_prefix: false,
+            include_dirs: false,
+        }
     }
 
     /// Create a new haystack from a possibly missing directory entry.
@@ -49,7 +53,10 @@ impl HaystackBuilder {
     /// searched, then this returns `None` after emitting any relevant log
     /// messages.
     fn build(&self, dent: ignore::DirEntry) -> Option<Haystack> {
-        let hay = Haystack { dent, strip_dot_prefix: self.strip_dot_prefix };
+        let hay = Haystack {
+            dent,
+            strip_dot_prefix: self.strip_dot_prefix,
+        };
         if let Some(err) = hay.dent.error() {
             ignore_message!("{err}");
         }
@@ -63,6 +70,10 @@ impl HaystackBuilder {
         // symlinks, then they have already been followed by the directory
         // traversal.)
         if hay.is_file() {
+            return Some(hay);
+        }
+        // If include_dirs is enabled, also return directories
+        if self.include_dirs && hay.is_dir() {
             return Some(hay);
         }
         // We got nothing. Emit a debug message, but only if this isn't a
@@ -84,11 +95,16 @@ impl HaystackBuilder {
     /// stripped.
     ///
     /// This is useful when implicitly searching the current working directory.
-    pub(crate) fn strip_dot_prefix(
-        &mut self,
-        yes: bool,
-    ) -> &mut HaystackBuilder {
+    pub(crate) fn strip_dot_prefix(&mut self, yes: bool) -> &mut HaystackBuilder {
         self.strip_dot_prefix = yes;
+        self
+    }
+
+    /// When enabled, directories are also returned as haystacks.
+    ///
+    /// This is useful for listing all paths (files and directories) in a tree.
+    pub(crate) fn include_dirs(&mut self, yes: bool) -> &mut HaystackBuilder {
+        self.include_dirs = yes;
         self
     }
 }

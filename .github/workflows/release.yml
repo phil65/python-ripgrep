@@ -8,6 +8,11 @@ on:
 permissions:
   contents: read
 
+env:
+  # Python versions to build wheels for
+  # Include both standard and free-threaded (t suffix) versions
+  PYTHON_VERSIONS: "3.10 3.11 3.12 3.13 3.13t 3.14 3.14t"
+
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -16,15 +21,30 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Set up Python versions
+        uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+
+      - name: Install free-threaded Python
+        uses: astral-sh/setup-uv@v6
+
+      - run: uv python install 3.13t 3.14t
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: 'true'
+          args: --release --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13 -i python3.13t -i python3.14 -i python3.14t
+          sccache: "true"
           manylinux: auto
-      
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -35,17 +55,27 @@ jobs:
     runs-on: windows-latest
     strategy:
       matrix:
-        target: [x64, x86]
+        target: [x64]
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Set up Python versions
+        uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: 'true'
-      
+          args: --release --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13 -i python3.14
+          sccache: "true"
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -59,14 +89,29 @@ jobs:
         target: [x86_64, aarch64]
     steps:
       - uses: actions/checkout@v4
-      
+
+      - name: Set up Python versions
+        uses: actions/setup-python@v5
+        with:
+          python-version: |
+            3.10
+            3.11
+            3.12
+            3.13
+            3.14
+
+      - name: Install free-threaded Python
+        uses: astral-sh/setup-uv@v6
+
+      - run: uv python install 3.13t 3.14t
+
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
-          sccache: 'true'
-      
+          args: --release --out dist -i python3.10 -i python3.11 -i python3.12 -i python3.13 -i python3.13t -i python3.14 -i python3.14t
+          sccache: "true"
+
       - name: Upload wheels
         uses: actions/upload-artifact@v4
         with:
@@ -77,13 +122,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      
+
       - name: Build sdist
         uses: PyO3/maturin-action@v1
         with:
           command: sdist
           args: --out dist
-      
+
       - name: Upload sdist
         uses: actions/upload-artifact@v4
         with:
@@ -100,7 +145,7 @@ jobs:
           pattern: wheels-*
           path: dist
           merge-multiple: true
-      
+
       - name: Publish to PyPI
         uses: PyO3/maturin-action@v1
         env:

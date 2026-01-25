@@ -57,6 +57,7 @@ pub(crate) struct HiArgs {
     globs: ignore::overrides::Override,
     heading: bool,
     hidden: bool,
+    include_dirs: bool,
     hyperlink_config: grep::printer::HyperlinkConfig,
     ignore_file_case_insensitive: bool,
     ignore_file: Vec<PathBuf>,
@@ -271,6 +272,7 @@ impl HiArgs {
             follow: low.follow,
             heading,
             hidden: low.hidden,
+            include_dirs: low.include_dirs,
             hyperlink_config,
             ignore_file: low.ignore_file,
             ignore_file_case_insensitive: low.ignore_file_case_insensitive,
@@ -353,6 +355,7 @@ impl HiArgs {
     pub(crate) fn haystack_builder(&self) -> HaystackBuilder {
         let mut builder = HaystackBuilder::new();
         builder.strip_dot_prefix(self.paths.has_implicit_path);
+        builder.include_dirs(self.include_dirs);
         builder
     }
 
