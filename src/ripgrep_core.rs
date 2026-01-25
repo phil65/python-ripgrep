@@ -645,13 +645,6 @@ fn py_files_impl(
         return py_files_impl_parallel(args, absolute, relative_to);
     }
 
-    // Get cwd once if needed for making paths absolute
-    let cwd = if absolute {
-        std::env::current_dir().ok()
-    } else {
-        None
-    };
-
     // Prepare prefix for relative path stripping
     let prefix = relative_to.map(|p| {
         let mut s = p.to_string();
@@ -685,23 +678,12 @@ fn py_files_impl(
         }
 
         let path = haystack.path();
-        let mut path_str = if let Some(cwd) = &cwd {
-            // Use canonicalize-like behavior: join then normalize
-            // On Windows, ripgrep may return paths with ..\..\.. which need resolution
-            let joined = cwd.join(path);
-            // Use components to normalize the path (resolve . and ..)
-            use std::path::Component;
-            let mut normalized = std::path::PathBuf::new();
-            for component in joined.components() {
-                match component {
-                    Component::ParentDir => {
-                        normalized.pop();
-                    }
-                    Component::CurDir => {}
-                    _ => normalized.push(component),
-                }
-            }
-            normalized.to_str().map(|s| s.to_string())
+        let mut path_str = if absolute {
+            // Use canonicalize for reliable absolute paths across all platforms
+            // This handles symlinks, .., and platform-specific quirks (macOS /private, Windows UNC)
+            path.canonicalize()
+                .ok()
+                .and_then(|p| p.to_str().map(|s| s.to_string()))
         } else {
             path.to_str().map(|s| s.to_string())
         };
@@ -730,13 +712,6 @@ fn py_files_impl_parallel(
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
-
-    // Get cwd once if needed for making paths absolute
-    let cwd = if absolute {
-        std::env::current_dir().ok()
-    } else {
-        None
-    };
 
     // Prepare prefix for relative path stripping
     let prefix: Option<String> = relative_to.map(|p| {
@@ -770,7 +745,6 @@ fn py_files_impl_parallel(
     args.walk_builder()?.build_parallel().run(|| {
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
-        let cwd = &cwd;
         let prefix = &prefix;
 
         Box::new(move |result| {
@@ -780,23 +754,11 @@ fn py_files_impl_parallel(
             };
 
             let path = haystack.path();
-            let mut path_str = if let Some(cwd) = &cwd {
-                // Use canonicalize-like behavior: join then normalize
-                // On Windows, ripgrep may return paths with ..\\..\\.. which need resolution
-                let joined = cwd.join(path);
-                // Use components to normalize the path (resolve . and ..)
-                use std::path::Component;
-                let mut normalized = std::path::PathBuf::new();
-                for component in joined.components() {
-                    match component {
-                        Component::ParentDir => {
-                            normalized.pop();
-                        }
-                        Component::CurDir => {}
-                        _ => normalized.push(component),
-                    }
-                }
-                normalized.to_str().map(|s| s.to_string())
+            let mut path_str = if absolute {
+                // Use canonicalize for reliable absolute paths across all platforms
+                path.canonicalize()
+                    .ok()
+                    .and_then(|p| p.to_str().map(|s| s.to_string()))
             } else {
                 path.to_str().map(|s| s.to_string())
             };
