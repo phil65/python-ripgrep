@@ -38,6 +38,7 @@ pub struct PyArgs {
     pub json: Option<bool>,
     pub include_dirs: Option<bool>,
     pub max_depth: Option<usize>,
+    pub absolute: Option<bool>,
 }
 
 #[pymethods]
@@ -64,6 +65,7 @@ impl PyArgs {
         json=None,
         include_dirs=None,
         max_depth=None,
+        absolute=None,
     ))]
     fn new(
         patterns: Vec<String>,
@@ -86,6 +88,7 @@ impl PyArgs {
         json: Option<bool>,
         include_dirs: Option<bool>,
         max_depth: Option<usize>,
+        absolute: Option<bool>,
     ) -> Self {
         PyArgs {
             patterns,
@@ -108,6 +111,7 @@ impl PyArgs {
             json,
             include_dirs,
             max_depth,
+            absolute,
         }
     }
 }
@@ -332,6 +336,7 @@ pub fn py_search(
             json,
             include_dirs: None, // search doesn't use this
             max_depth: None,    // search doesn't use this
+            absolute: None,     // search doesn't use this
         };
 
         let mode = if py_args.json == Some(true) {
@@ -549,6 +554,7 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     json=None,
     include_dirs=None,
     max_depth=None,
+    absolute=None,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -572,6 +578,7 @@ pub fn py_files(
     json: Option<bool>,
     include_dirs: Option<bool>,
     max_depth: Option<usize>,
+    absolute: Option<bool>,
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -595,6 +602,7 @@ pub fn py_files(
             json,
             include_dirs,
             max_depth,
+            absolute,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
@@ -605,7 +613,7 @@ pub fn py_files(
 
         let args = args_result.unwrap();
 
-        let files_result = py_files_impl(&args);
+        let files_result = py_files_impl(&args, py_args.absolute.unwrap_or(false));
 
         if let Err(err) = files_result {
             return Err(PyValueError::new_err(err.to_string()));
@@ -615,11 +623,18 @@ pub fn py_files(
     })
 }
 
-fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+fn py_files_impl(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
     // Use parallel implementation when threads > 1 and no sorting requested
     if args.threads() > 1 && args.sort_mode().is_none() {
-        return py_files_impl_parallel(args);
+        return py_files_impl_parallel(args, absolute);
     }
+
+    // Get cwd once if needed for making paths absolute
+    let cwd = if absolute {
+        std::env::current_dir().ok()
+    } else {
+        None
+    };
 
     // Single-threaded implementation (also used when sorting is requested)
     let haystack_builder = args.haystack_builder();
@@ -644,10 +659,19 @@ fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
             }
         }
 
-        let haystack_path = haystack.path().to_str();
+        let path = haystack.path();
+        let path_str = if let Some(ref cwd) = cwd {
+            if !path.is_absolute() {
+                cwd.join(path).to_str().map(|s| s.to_string())
+            } else {
+                path.to_str().map(|s| s.to_string())
+            }
+        } else {
+            path.to_str().map(|s| s.to_string())
+        };
 
-        if let Some(path) = haystack_path {
-            matches.push(path.to_string());
+        if let Some(p) = path_str {
+            matches.push(p);
         }
     }
 
@@ -655,10 +679,17 @@ fn py_files_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 }
 
 /// Parallel file listing implementation
-fn py_files_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+fn py_files_impl_parallel(args: &HiArgs, absolute: bool) -> anyhow::Result<Vec<String>> {
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
+
+    // Get cwd once if needed for making paths absolute
+    let cwd = if absolute {
+        std::env::current_dir().ok()
+    } else {
+        None
+    };
 
     let (tx, rx) = mpsc::channel::<String>();
 
@@ -683,6 +714,7 @@ fn py_files_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     args.walk_builder()?.build_parallel().run(|| {
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
+        let cwd = &cwd;
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -690,8 +722,19 @@ fn py_files_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
                 None => return WalkState::Continue,
             };
 
-            if let Some(path) = haystack.path().to_str() {
-                match tx.send(path.to_string()) {
+            let path = haystack.path();
+            let path_str = if let Some(ref cwd) = cwd {
+                if !path.is_absolute() {
+                    cwd.join(path).to_str().map(|s| s.to_string())
+                } else {
+                    path.to_str().map(|s| s.to_string())
+                }
+            } else {
+                path.to_str().map(|s| s.to_string())
+            };
+
+            if let Some(p) = path_str {
+                match tx.send(p) {
                     Ok(_) => WalkState::Continue,
                     Err(_) => WalkState::Quit,
                 }
