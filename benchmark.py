@@ -11,8 +11,8 @@ def count_lines_in_result(result_list: list[str]) -> int:
     """Count actual match lines from grouped file results."""
     total = 0
     for item in result_list:
-        lines = item.strip().split("\n")
-        total += len(lines) - 1  # -1 for the filepath line
+        lines = [l for l in item.strip().split("\n") if l]
+        total += len(lines)
     return total
 
 
