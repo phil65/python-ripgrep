@@ -160,6 +160,34 @@ pub struct FileInfo {
     pub nlink: u64,
 }
 
+/// A single submatch within a search match line
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct SearchSubmatch {
+    /// The matched text
+    pub text: String,
+    /// Byte offset of match start within the line
+    pub start: usize,
+    /// Byte offset of match end within the line
+    pub end: usize,
+}
+
+/// A single search match (one matching line)
+#[pyclass(get_all)]
+#[derive(Clone)]
+pub struct SearchMatch {
+    /// File path (relative or absolute depending on search args)
+    pub path: String,
+    /// 1-based line number
+    pub line_number: u64,
+    /// Absolute byte offset from the start of the file
+    pub absolute_offset: u64,
+    /// The text of the matching line (trimmed trailing newline)
+    pub line_text: String,
+    /// Individual submatches within this line
+    pub submatches: Vec<SearchSubmatch>,
+}
+
 #[pyclass(eq)]
 #[derive(PartialEq, Clone)]
 #[pyo3(get_all)]
@@ -576,27 +604,209 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     Ok(results)
 }
 
+/// Structured search implementation - returns parsed SearchMatch objects
+fn py_search_impl_structured(
+    args: &HiArgs,
+    max_total: Option<u64>,
+) -> anyhow::Result<Vec<SearchMatch>> {
+    use search::PatternMatcher;
+
+    let haystack_builder = args.haystack_builder();
+    let unsorted = args
+        .walk_builder()?
+        .build()
+        .filter_map(|result| haystack_builder.build_from_result(result));
+    let haystacks = args.sort(unsorted);
+
+    let matcher = args.matcher()?;
+    let mut searcher = args.searcher()?;
+
+    let mut results = Vec::new();
+    let max_total = max_total.map(|m| m as usize);
+
+    for haystack in haystacks {
+        if let Some(max) = max_total {
+            if results.len() >= max {
+                break;
+            }
+        }
+
+        let mut printer_buf: Vec<u8> = vec![];
+
+        let search_result = {
+            let mut json_printer = args.printer_json(&mut printer_buf);
+            let path = haystack.path();
+
+            match &matcher {
+                PatternMatcher::RustRegex(m) => {
+                    let mut sink = json_printer.sink_with_path(m, path);
+                    searcher.search_path(m, path, &mut sink)
+                }
+            }
+        };
+
+        match search_result {
+            Ok(_) => {
+                if !printer_buf.is_empty() {
+                    if let Ok(s) = String::from_utf8(printer_buf) {
+                        for line in s.lines() {
+                            if let Some(max) = max_total {
+                                if results.len() >= max {
+                                    break;
+                                }
+                            }
+                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
+                                if value.get("type").and_then(|t| t.as_str()) == Some("match") {
+                                    if let Some(data) = value.get("data") {
+                                        let path_str = data
+                                            .get("path")
+                                            .and_then(|p| p.get("text"))
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("")
+                                            .to_string();
+                                        let line_number = data
+                                            .get("line_number")
+                                            .and_then(|n| n.as_u64())
+                                            .unwrap_or(0);
+                                        let absolute_offset = data
+                                            .get("absolute_offset")
+                                            .and_then(|n| n.as_u64())
+                                            .unwrap_or(0);
+                                        let line_text = data
+                                            .get("lines")
+                                            .and_then(|l| l.get("text"))
+                                            .and_then(|t| t.as_str())
+                                            .unwrap_or("")
+                                            .trim_end_matches('\n')
+                                            .to_string();
+
+                                        let mut submatches = Vec::new();
+                                        if let Some(sms) =
+                                            data.get("submatches").and_then(|s| s.as_array())
+                                        {
+                                            for sm in sms {
+                                                let text = sm
+                                                    .get("match")
+                                                    .and_then(|m| m.get("text"))
+                                                    .and_then(|t| t.as_str())
+                                                    .unwrap_or("")
+                                                    .to_string();
+                                                let start = sm
+                                                    .get("start")
+                                                    .and_then(|n| n.as_u64())
+                                                    .unwrap_or(0)
+                                                    as usize;
+                                                let end = sm
+                                                    .get("end")
+                                                    .and_then(|n| n.as_u64())
+                                                    .unwrap_or(0)
+                                                    as usize;
+                                                submatches.push(SearchSubmatch {
+                                                    text,
+                                                    start,
+                                                    end,
+                                                });
+                                            }
+                                        }
+
+                                        results.push(SearchMatch {
+                                            path: path_str,
+                                            line_number,
+                                            absolute_offset,
+                                            line_text,
+                                            submatches,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
+            Err(err) => {
+                err_message!("{}: {}", haystack.path().display(), err);
+                continue;
+            }
+        }
+    }
+
+    Ok(results)
+}
+
 #[pyfunction]
-#[pyo3(name = "files")]
+#[pyo3(name = "search_structured")]
 #[pyo3(signature = (
     patterns,
     paths=None,
     globs=None,
-    heading=None,
-    after_context=None,
-    before_context=None,
-    separator_field_context=None,
-    separator_field_match=None,
-    separator_context=None,
     sort=None,
     max_count=None,
-    line_number=None,
+    max_total=None,
     multiline=None,
     case_sensitive=None,
     smart_case=None,
     no_ignore=None,
     hidden=None,
-    json=None,
+))]
+pub fn py_search_structured(
+    py: Python<'_>,
+    patterns: Vec<String>,
+    paths: Option<Vec<String>>,
+    globs: Option<Vec<String>>,
+    sort: Option<PySortMode>,
+    max_count: Option<u64>,
+    max_total: Option<u64>,
+    multiline: Option<bool>,
+    case_sensitive: Option<bool>,
+    smart_case: Option<bool>,
+    no_ignore: Option<bool>,
+    hidden: Option<bool>,
+) -> PyResult<Vec<SearchMatch>> {
+    py.detach(|| {
+        let py_args = PyArgs {
+            patterns,
+            paths,
+            globs,
+            heading: None,
+            after_context: None,
+            before_context: None,
+            separator_field_context: None,
+            separator_field_match: None,
+            separator_context: None,
+            sort,
+            max_count,
+            line_number: None,
+            multiline,
+            case_sensitive,
+            smart_case,
+            no_ignore,
+            hidden,
+            json: Some(true),
+            include_dirs: None,
+            max_depth: None,
+            absolute: None,
+            relative_to: None,
+        };
+
+        let mode = lowargs::Mode::Search(lowargs::SearchMode::JSON);
+        let args = pyargs_to_hiargs(&py_args, mode)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
+
+        py_search_impl_structured(&args, max_total)
+            .map_err(|err| PyValueError::new_err(err.to_string()))
+    })
+}
+
+#[pyfunction]
+#[pyo3(name = "files")]
+#[pyo3(signature = (
+    paths=None,
+    globs=None,
+    sort=None,
+    max_count=None,
+    no_ignore=None,
+    hidden=None,
     include_dirs=None,
     max_depth=None,
     absolute=None,
@@ -604,24 +814,12 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 ))]
 pub fn py_files(
     py: Python<'_>,
-    patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
-    heading: Option<bool>,
-    after_context: Option<u64>,
-    before_context: Option<u64>,
-    separator_field_context: Option<String>,
-    separator_field_match: Option<String>,
-    separator_context: Option<String>,
     sort: Option<PySortMode>,
     max_count: Option<u64>,
-    line_number: Option<bool>,
-    multiline: Option<bool>,
-    case_sensitive: Option<bool>,
-    smart_case: Option<bool>,
     no_ignore: Option<bool>,
     hidden: Option<bool>,
-    json: Option<bool>,
     include_dirs: Option<bool>,
     max_depth: Option<usize>,
     absolute: Option<bool>,
@@ -629,24 +827,24 @@ pub fn py_files(
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
-            patterns,
+            patterns: vec![],
             paths,
             globs,
-            heading,
-            after_context,
-            before_context,
-            separator_field_context,
-            separator_field_match,
-            separator_context,
+            heading: None,
+            after_context: None,
+            before_context: None,
+            separator_field_context: None,
+            separator_field_match: None,
+            separator_context: None,
             sort,
             max_count,
-            line_number,
-            multiline,
-            case_sensitive,
-            smart_case,
+            line_number: None,
+            multiline: None,
+            case_sensitive: None,
+            smart_case: None,
             no_ignore,
             hidden,
-            json,
+            json: None,
             include_dirs,
             max_depth,
             absolute,
@@ -675,6 +873,32 @@ pub fn py_files(
     })
 }
 
+/// Build a prefix string for stripping relative paths
+fn build_relative_prefix(relative_to: Option<&str>) -> Option<String> {
+    relative_to.map(|p| {
+        let mut s = p.to_string();
+        if !s.ends_with('/') && !s.ends_with('\\') {
+            s.push('/');
+        }
+        s
+    })
+}
+
+/// Normalize a path and optionally strip a relative prefix
+fn normalize_and_strip(
+    path: &std::path::Path,
+    absolute: bool,
+    prefix: &Option<String>,
+) -> Option<String> {
+    let mut path_str = normalize_path(path, absolute)?;
+    if let Some(pfx) = prefix {
+        if path_str.starts_with(pfx) {
+            path_str = path_str[pfx.len()..].to_string();
+        }
+    }
+    Some(path_str)
+}
+
 fn py_files_impl(
     args: &HiArgs,
     absolute: bool,
@@ -685,23 +909,13 @@ fn py_files_impl(
         return py_files_impl_parallel(args, absolute, relative_to);
     }
 
-    // Prepare prefix for relative path stripping
-    let prefix = relative_to.map(|p| {
-        let mut s = p.to_string();
-        if !s.ends_with('/') && !s.ends_with('\\') {
-            s.push('/');
-        }
-        s
-    });
+    let prefix = build_relative_prefix(relative_to);
 
-    // Single-threaded implementation (also used when sorting is requested)
     let haystack_builder = args.haystack_builder();
-    let walk_builder = args.walk_builder()?;
-
-    let unsorted = walk_builder
+    let unsorted = args
+        .walk_builder()?
         .build()
         .filter_map(|result| haystack_builder.build_from_result(result));
-
     let haystacks = args.sort(unsorted);
 
     let mut matches = Vec::new();
@@ -717,64 +931,13 @@ fn py_files_impl(
             break;
         }
 
-        let path = haystack.path();
-        let mut path_str = if absolute {
-            // Make path absolute, handling relative paths with .. components
-            let full_path = if path.is_absolute() {
-                path.to_path_buf()
-            } else {
-                std::env::current_dir().unwrap_or_default().join(path)
-            };
-
-            // Try canonicalize first (resolves symlinks), fall back to manual normalization
-            full_path
-                .canonicalize()
-                .ok()
-                .or_else(|| {
-                    // Manual normalization: resolve . and .. components
-                    use std::path::Component;
-                    let mut normalized = std::path::PathBuf::new();
-                    for component in full_path.components() {
-                        match component {
-                            Component::ParentDir => {
-                                normalized.pop();
-                            }
-                            Component::CurDir => {}
-                            _ => normalized.push(component),
-                        }
-                    }
-                    Some(normalized)
-                })
-                .map(|p| {
-                    // On Windows, canonicalize returns \\?\ prefix which breaks os.path.relpath
-                    // Strip it to return a normal path
-                    let s = p.to_string_lossy();
-                    if let Some(stripped) = s.strip_prefix(r"\\?\") {
-                        std::path::PathBuf::from(stripped)
-                    } else {
-                        p
-                    }
-                })
-                .and_then(|p| p.to_str().map(|s| s.to_string()))
-        } else {
-            path.to_str().map(|s| s.to_string())
-        };
-
-        // Strip prefix if relative_to is set
-        if let (Some(p), Some(pfx)) = (&mut path_str, &prefix)
-            && p.starts_with(pfx)
-        {
-            *p = p[pfx.len()..].to_string();
-        }
-
-        if let Some(p) = path_str {
+        if let Some(p) = normalize_and_strip(haystack.path(), absolute, &prefix) {
             matches.push(p);
         }
     }
 
     Ok(matches)
 }
-
 /// Parallel file listing implementation
 fn py_files_impl_parallel(
     args: &HiArgs,
@@ -784,15 +947,7 @@ fn py_files_impl_parallel(
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
-
-    // Prepare prefix for relative path stripping
-    let prefix: Option<String> = relative_to.map(|p| {
-        let mut s = p.to_string();
-        if !s.ends_with('/') && !s.ends_with('\\') {
-            s.push('/');
-        }
-        s
-    });
+    let prefix = build_relative_prefix(relative_to);
 
     let (tx, rx) = mpsc::channel::<String>();
 
@@ -825,57 +980,7 @@ fn py_files_impl_parallel(
                 None => return WalkState::Continue,
             };
 
-            let path = haystack.path();
-            let mut path_str = if absolute {
-                // Make path absolute, handling relative paths with .. components
-                let full_path = if path.is_absolute() {
-                    path.to_path_buf()
-                } else {
-                    std::env::current_dir().unwrap_or_default().join(path)
-                };
-
-                // Try canonicalize first (resolves symlinks), fall back to manual normalization
-                full_path
-                    .canonicalize()
-                    .ok()
-                    .or_else(|| {
-                        // Manual normalization: resolve . and .. components
-                        use std::path::Component;
-                        let mut normalized = std::path::PathBuf::new();
-                        for component in full_path.components() {
-                            match component {
-                                Component::ParentDir => {
-                                    normalized.pop();
-                                }
-                                Component::CurDir => {}
-                                _ => normalized.push(component),
-                            }
-                        }
-                        Some(normalized)
-                    })
-                    .map(|p| {
-                        // On Windows, canonicalize returns \\?\ prefix which breaks os.path.relpath
-                        // Strip it to return a normal path
-                        let s = p.to_string_lossy();
-                        if let Some(stripped) = s.strip_prefix(r"\\?\") {
-                            std::path::PathBuf::from(stripped)
-                        } else {
-                            p
-                        }
-                    })
-                    .and_then(|p| p.to_str().map(|s| s.to_string()))
-            } else {
-                path.to_str().map(|s| s.to_string())
-            };
-
-            // Strip prefix if relative_to is set
-            if let (Some(p), Some(pfx)) = (&mut path_str, prefix)
-                && p.starts_with(pfx)
-            {
-                *p = p[pfx.len()..].to_string();
-            }
-
-            if let Some(p) = path_str {
+            if let Some(p) = normalize_and_strip(haystack.path(), absolute, prefix) {
                 match tx.send(p) {
                     Ok(_) => WalkState::Continue,
                     Err(_) => WalkState::Quit,
@@ -996,7 +1101,6 @@ fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo 
 #[pyfunction]
 #[pyo3(name = "files_with_info")]
 #[pyo3(signature = (
-    patterns,
     paths=None,
     globs=None,
     sort=None,
@@ -1005,10 +1109,10 @@ fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo 
     include_dirs=None,
     max_depth=None,
     absolute=None,
+    relative_to=None,
 ))]
 pub fn py_files_with_info(
     py: Python<'_>,
-    patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
     sort: Option<PySortMode>,
@@ -1017,10 +1121,11 @@ pub fn py_files_with_info(
     include_dirs: Option<bool>,
     max_depth: Option<usize>,
     absolute: Option<bool>,
+    relative_to: Option<String>,
 ) -> PyResult<HashMap<String, FileInfo>> {
     py.detach(|| {
         let py_args = PyArgs {
-            patterns,
+            patterns: vec![],
             paths,
             globs,
             heading: None,
@@ -1041,36 +1146,29 @@ pub fn py_files_with_info(
             include_dirs,
             max_depth,
             absolute,
-            relative_to: None,
+            relative_to,
         };
 
-        let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
-
-        if let Err(err) = args_result {
-            return Err(PyValueError::new_err(err.to_string()));
-        }
-
-        let args = args_result.unwrap();
+        let args = pyargs_to_hiargs(&py_args, lowargs::Mode::Files)
+            .map_err(|err| PyValueError::new_err(err.to_string()))?;
         let absolute = py_args.absolute.unwrap_or(false);
 
-        let files_result = py_files_with_info_impl(&args, absolute);
-
-        if let Err(err) = files_result {
-            return Err(PyValueError::new_err(err.to_string()));
-        }
-
-        Ok(files_result.unwrap())
+        py_files_with_info_impl(&args, absolute, py_args.relative_to.as_deref())
+            .map_err(|err| PyValueError::new_err(err.to_string()))
     })
 }
 
 fn py_files_with_info_impl(
     args: &HiArgs,
     absolute: bool,
+    relative_to: Option<&str>,
 ) -> anyhow::Result<HashMap<String, FileInfo>> {
     // Use parallel implementation when threads > 1 and no sorting requested
     if args.threads() > 1 && args.sort_mode().is_none() {
-        return py_files_with_info_impl_parallel(args, absolute);
+        return py_files_with_info_impl_parallel(args, absolute, relative_to);
     }
+
+    let prefix = build_relative_prefix(relative_to);
 
     // Single-threaded implementation
     let haystack_builder = args.haystack_builder();
@@ -1096,8 +1194,7 @@ fn py_files_with_info_impl(
         }
 
         let path = haystack.path();
-        if let Some(path_str) = normalize_path(path, absolute) {
-            // Get metadata for the file
+        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix) {
             if let Ok(metadata) = std::fs::metadata(path) {
                 let info = create_file_info(path_str.clone(), &metadata);
                 results.insert(path_str, info);
@@ -1112,10 +1209,12 @@ fn py_files_with_info_impl(
 fn py_files_with_info_impl_parallel(
     args: &HiArgs,
     absolute: bool,
+    relative_to: Option<&str>,
 ) -> anyhow::Result<HashMap<String, FileInfo>> {
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
+    let prefix = build_relative_prefix(relative_to);
 
     let (tx, rx) = mpsc::channel::<(String, FileInfo)>();
 
@@ -1140,6 +1239,7 @@ fn py_files_with_info_impl_parallel(
     args.walk_builder()?.build_parallel().run(|| {
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
+        let prefix = &prefix;
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -1148,8 +1248,7 @@ fn py_files_with_info_impl_parallel(
             };
 
             let path = haystack.path();
-            if let Some(path_str) = normalize_path(path, absolute) {
-                // Get metadata for the file
+            if let Some(path_str) = normalize_and_strip(path, absolute, prefix) {
                 if let Ok(metadata) = std::fs::metadata(path) {
                     let info = create_file_info(path_str.clone(), &metadata);
                     match tx.send((path_str, info)) {

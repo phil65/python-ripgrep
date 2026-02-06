@@ -1,4 +1,10 @@
-from ripgrep_rs import PySortMode, PySortModeKind, files, search
+from ripgrep_rs import (
+    PySortMode,
+    PySortModeKind,
+    files,
+    search,
+    search_structured,
+)
 
 
 def test_search_with_kwargs() -> None:
@@ -13,7 +19,6 @@ def test_search_with_kwargs() -> None:
 def test_files_with_kwargs() -> None:
     print("Testing files with keyword arguments:")
     results = files(
-        patterns=[".*"],
         paths=["src"],
         globs=["*.rs"],
         sort=PySortMode(PySortModeKind.Path),
@@ -24,7 +29,18 @@ def test_files_with_kwargs() -> None:
     print()
 
 
+def test_search_structured() -> None:
+    print("Testing search_structured:")
+    results = search_structured(["def"], paths=["src"], globs=["*.rs"], max_total=5)
+    print(f"Found {len(results)} matches")
+    for m in results:
+        print(f"  {m.path}:{m.line_number}: {m.line_text.strip()}")
+        for sm in m.submatches:
+            print(f"    submatch: [{sm.start}:{sm.end}] {sm.text!r}")
+    print()
+
+
 if __name__ == "__main__":
-    # Test both new and legacy interfaces
     test_search_with_kwargs()
     test_files_with_kwargs()
+    test_search_structured()

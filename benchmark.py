@@ -71,7 +71,7 @@ def bench_lib_files(path: str, n: int = 5) -> tuple[float, int]:
     file_count = 0
     for _ in range(n):
         start = time.perf_counter()
-        result = ripgrep_rs.files([""], paths=[path])
+        result = ripgrep_rs.files(paths=[path])
         times.append(time.perf_counter() - start)
         file_count = len(result)
     return min(times) * 1000, file_count

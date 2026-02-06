@@ -24,7 +24,7 @@ class TestAbsolutePaths:
             (tmppath / "file1.txt").write_text("content1")
 
             result = files(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -45,7 +45,7 @@ class TestAbsolutePaths:
             (subdir / "file3.txt").write_text("content3")
 
             result = files(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -67,7 +67,7 @@ class TestAbsolutePaths:
             (tmppath / "test.txt").write_text("hello")
 
             result = files(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -89,7 +89,7 @@ class TestAbsolutePaths:
                 os.chdir(tempfile.gettempdir())
 
                 result = files(
-                    patterns=["*"],
+                    
                     paths=[str(tmppath)],
                     absolute=True,
                 )
@@ -108,7 +108,7 @@ class TestAbsolutePaths:
             (tmppath / "test.txt").write_text("hello")
 
             result = files(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=False,
             )
@@ -124,7 +124,7 @@ class TestAbsolutePaths:
             (deep / "deep.txt").write_text("deep content")
 
             result = files(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -156,7 +156,7 @@ class TestAbsolutePaths:
             glob_pattern = "**/*.txt"
 
             result = files(
-                patterns=["*"],
+                
                 paths=[abs_base],
                 globs=[glob_pattern],
                 hidden=False,
@@ -204,7 +204,7 @@ class TestAbsolutePaths:
             abs_base = str(test_dir.resolve())
 
             result = files(
-                patterns=["*"],
+                
                 paths=[abs_base],
                 globs=["**/*.txt"],
                 hidden=False,
@@ -256,7 +256,7 @@ class TestAbsolutePaths:
             abs_base = str(test_dir.resolve())
 
             result = files(
-                patterns=["*"],
+                
                 paths=[abs_base],
                 absolute=True,
             )
@@ -290,7 +290,7 @@ class TestFilesWithInfo:
             test_file.write_text("content1")
 
             result = files_with_info(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -321,7 +321,7 @@ class TestFilesWithInfo:
             (tmppath / "file3.txt").write_text("ccc")
 
             result = files_with_info(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 globs=["*.txt"],
                 absolute=True,
@@ -342,7 +342,7 @@ class TestFilesWithInfo:
             (tmppath / "test.txt").write_text("test content")
 
             result = files_with_info(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 absolute=True,
             )
@@ -373,7 +373,7 @@ class TestFilesWithInfo:
             (tmppath / "file.rs").write_text("rust")
 
             result = files_with_info(
-                patterns=["*"],
+                
                 paths=[str(tmppath)],
                 globs=["*.py"],
                 absolute=True,
