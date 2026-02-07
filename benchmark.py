@@ -11,7 +11,7 @@ def count_lines_in_result(result_list: list[str]) -> int:
     """Count actual match lines from grouped file results."""
     total = 0
     for item in result_list:
-        lines = [l for l in item.strip().split("\n") if l]
+        lines = [i for i in item.strip().split("\n") if i]
         total += len(lines)
     return total
 
@@ -30,7 +30,7 @@ def bench_subprocess_grep(
         times.append(time.perf_counter() - start)
         try:
             stdout = result.stdout.decode("utf-8", errors="replace")
-            match_count = len([l for l in stdout.strip().split("\n") if l])
+            match_count = len([i for i in stdout.strip().split("\n") if i])
         except Exception:
             match_count = -1
     return min(times) * 1000, match_count
@@ -62,7 +62,7 @@ def bench_subprocess_files(path: str, n: int = 5) -> tuple[float, int]:
             text=True,
         )
         times.append(time.perf_counter() - start)
-        file_count = len([l for l in result.stdout.strip().split("\n") if l])
+        file_count = len([i for i in result.stdout.strip().split("\n") if i])
     return min(times) * 1000, file_count
 
 

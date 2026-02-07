@@ -859,10 +859,12 @@ pub fn py_files(
 
         let args = args_result.unwrap();
 
+        let roots = py_args.paths.clone().unwrap_or_default();
         let files_result = py_files_impl(
             &args,
             py_args.absolute.unwrap_or(false),
             py_args.relative_to.as_deref(),
+            &roots,
         );
 
         if let Err(err) = files_result {
@@ -884,17 +886,33 @@ fn build_relative_prefix(relative_to: Option<&str>) -> Option<String> {
     })
 }
 
-/// Normalize a path and optionally strip a relative prefix
+/// Normalize a path and optionally strip a relative prefix.
+/// Returns None for the root directory itself (empty, ".", or matching a root path).
 fn normalize_and_strip(
     path: &std::path::Path,
     absolute: bool,
     prefix: &Option<String>,
+    roots: &[String],
 ) -> Option<String> {
     let mut path_str = normalize_path(path, absolute)?;
     if let Some(pfx) = prefix {
+        if path_str == pfx.trim_end_matches('/').trim_end_matches('\\') {
+            // This is the root directory itself — skip it
+            return None;
+        }
         if path_str.starts_with(pfx) {
             path_str = path_str[pfx.len()..].to_string();
         }
+    }
+    if path_str.is_empty() || path_str == "." {
+        return None;
+    }
+    // Filter out root search paths themselves
+    if roots.iter().any(|root| {
+        let normalized_root = root.trim_end_matches('/').trim_end_matches('\\');
+        path_str == normalized_root
+    }) {
+        return None;
     }
     Some(path_str)
 }
@@ -903,10 +921,11 @@ fn py_files_impl(
     args: &HiArgs,
     absolute: bool,
     relative_to: Option<&str>,
+    roots: &[String],
 ) -> anyhow::Result<Vec<String>> {
     // Use parallel implementation when threads > 1 and no sorting requested
     if args.threads() > 1 && args.sort_mode().is_none() {
-        return py_files_impl_parallel(args, absolute, relative_to);
+        return py_files_impl_parallel(args, absolute, relative_to, roots);
     }
 
     let prefix = build_relative_prefix(relative_to);
@@ -931,7 +950,7 @@ fn py_files_impl(
             break;
         }
 
-        if let Some(p) = normalize_and_strip(haystack.path(), absolute, &prefix) {
+        if let Some(p) = normalize_and_strip(haystack.path(), absolute, &prefix, roots) {
             matches.push(p);
         }
     }
@@ -943,6 +962,7 @@ fn py_files_impl_parallel(
     args: &HiArgs,
     absolute: bool,
     relative_to: Option<&str>,
+    roots: &[String],
 ) -> anyhow::Result<Vec<String>> {
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
@@ -980,7 +1000,7 @@ fn py_files_impl_parallel(
                 None => return WalkState::Continue,
             };
 
-            if let Some(p) = normalize_and_strip(haystack.path(), absolute, prefix) {
+            if let Some(p) = normalize_and_strip(haystack.path(), absolute, prefix, roots) {
                 match tx.send(p) {
                     Ok(_) => WalkState::Continue,
                     Err(_) => WalkState::Quit,
@@ -1152,8 +1172,9 @@ pub fn py_files_with_info(
         let args = pyargs_to_hiargs(&py_args, lowargs::Mode::Files)
             .map_err(|err| PyValueError::new_err(err.to_string()))?;
         let absolute = py_args.absolute.unwrap_or(false);
+        let roots = py_args.paths.clone().unwrap_or_default();
 
-        py_files_with_info_impl(&args, absolute, py_args.relative_to.as_deref())
+        py_files_with_info_impl(&args, absolute, py_args.relative_to.as_deref(), &roots)
             .map_err(|err| PyValueError::new_err(err.to_string()))
     })
 }
@@ -1162,10 +1183,11 @@ fn py_files_with_info_impl(
     args: &HiArgs,
     absolute: bool,
     relative_to: Option<&str>,
+    roots: &[String],
 ) -> anyhow::Result<HashMap<String, FileInfo>> {
     // Use parallel implementation when threads > 1 and no sorting requested
     if args.threads() > 1 && args.sort_mode().is_none() {
-        return py_files_with_info_impl_parallel(args, absolute, relative_to);
+        return py_files_with_info_impl_parallel(args, absolute, relative_to, roots);
     }
 
     let prefix = build_relative_prefix(relative_to);
@@ -1194,7 +1216,7 @@ fn py_files_with_info_impl(
         }
 
         let path = haystack.path();
-        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix) {
+        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix, roots) {
             if let Ok(metadata) = std::fs::metadata(path) {
                 let info = create_file_info(path_str.clone(), &metadata);
                 results.insert(path_str, info);
@@ -1210,6 +1232,7 @@ fn py_files_with_info_impl_parallel(
     args: &HiArgs,
     absolute: bool,
     relative_to: Option<&str>,
+    roots: &[String],
 ) -> anyhow::Result<HashMap<String, FileInfo>> {
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
@@ -1248,7 +1271,7 @@ fn py_files_with_info_impl_parallel(
             };
 
             let path = haystack.path();
-            if let Some(path_str) = normalize_and_strip(path, absolute, prefix) {
+            if let Some(path_str) = normalize_and_strip(path, absolute, prefix, roots) {
                 if let Ok(metadata) = std::fs::metadata(path) {
                     let info = create_file_info(path_str.clone(), &metadata);
                     match tx.send((path_str, info)) {
