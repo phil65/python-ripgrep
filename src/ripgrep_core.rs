@@ -875,15 +875,26 @@ pub fn py_files(
     })
 }
 
-/// Build a prefix string for stripping relative paths
+/// Build a prefix string for stripping relative paths.
+/// Normalizes separators to the platform default for consistent matching.
 fn build_relative_prefix(relative_to: Option<&str>) -> Option<String> {
     relative_to.map(|p| {
-        let mut s = p.to_string();
-        if !s.ends_with('/') && !s.ends_with('\\') {
-            s.push('/');
+        let mut s = normalize_separators(p);
+        if !s.ends_with(std::path::MAIN_SEPARATOR) {
+            s.push(std::path::MAIN_SEPARATOR);
         }
         s
     })
+}
+
+/// Normalize path separators to the platform default.
+/// On Windows, converts `/` to `\`. On Unix, this is a no-op.
+fn normalize_separators(path: &str) -> String {
+    if cfg!(windows) {
+        path.replace('/', "\\")
+    } else {
+        path.to_string()
+    }
 }
 
 /// Normalize a path and optionally strip a relative prefix.
@@ -909,7 +920,8 @@ fn normalize_and_strip(
     }
     // Filter out root search paths themselves
     if roots.iter().any(|root| {
-        let normalized_root = root.trim_end_matches('/').trim_end_matches('\\');
+        let normalized_root = normalize_separators(root);
+        let normalized_root = normalized_root.trim_end_matches('/').trim_end_matches('\\');
         path_str == normalized_root
     }) {
         return None;
