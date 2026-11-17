@@ -12,8 +12,8 @@ from ripgrep_rs import search, search_structured
 
 @pytest.fixture
 def tree(tmp_path: Path) -> Path:
-    (tmp_path / "a.txt").write_text("foo 1\nfoo 2\nfoo 3\nfoo 4\n")
-    (tmp_path / "b.txt").write_text("bar\nfoo 5\n")
+    (tmp_path / "a.txt").write_bytes(b"foo 1\nfoo 2\nfoo 3\nfoo 4\n")
+    (tmp_path / "b.txt").write_bytes(b"bar\nfoo 5\n")
     return tmp_path
 
 
