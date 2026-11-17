@@ -123,7 +123,7 @@ impl PyArgs {
 }
 
 /// File information returned by files_with_info
-#[pyclass(get_all)]
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct FileInfo {
     /// Full path to the file
@@ -161,7 +161,7 @@ pub struct FileInfo {
 }
 
 /// A single submatch within a search match line
-#[pyclass(get_all)]
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct SearchSubmatch {
     /// The matched text
@@ -173,7 +173,7 @@ pub struct SearchSubmatch {
 }
 
 /// A single search match (one matching line)
-#[pyclass(get_all)]
+#[pyclass(get_all, skip_from_py_object)]
 #[derive(Clone)]
 pub struct SearchMatch {
     /// File path (relative or absolute depending on search args)
@@ -188,7 +188,7 @@ pub struct SearchMatch {
     pub submatches: Vec<SearchSubmatch>,
 }
 
-#[pyclass(eq)]
+#[pyclass(eq, from_py_object)]
 #[derive(PartialEq, Clone)]
 #[pyo3(get_all)]
 pub struct PySortMode {
@@ -205,7 +205,7 @@ impl PySortMode {
     }
 }
 
-#[pyclass(eq)]
+#[pyclass(eq, from_py_object)]
 #[derive(PartialEq, Clone)]
 #[pyo3(get_all)]
 pub enum PySortModeKind {
@@ -625,10 +625,10 @@ fn py_search_impl_structured(
     let max_total = max_total.map(|m| m as usize);
 
     for haystack in haystacks {
-        if let Some(max) = max_total {
-            if results.len() >= max {
-                break;
-            }
+        if let Some(max) = max_total
+            && results.len() >= max
+        {
+            break;
         }
 
         let mut printer_buf: Vec<u8> = vec![];
@@ -647,78 +647,66 @@ fn py_search_impl_structured(
 
         match search_result {
             Ok(_) => {
-                if !printer_buf.is_empty() {
-                    if let Ok(s) = String::from_utf8(printer_buf) {
-                        for line in s.lines() {
-                            if let Some(max) = max_total {
-                                if results.len() >= max {
-                                    break;
+                if !printer_buf.is_empty()
+                    && let Ok(s) = String::from_utf8(printer_buf)
+                {
+                    for line in s.lines() {
+                        if let Some(max) = max_total
+                            && results.len() >= max
+                        {
+                            break;
+                        }
+                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line)
+                            && value.get("type").and_then(|t| t.as_str()) == Some("match")
+                            && let Some(data) = value.get("data")
+                        {
+                            let path_str = data
+                                .get("path")
+                                .and_then(|p| p.get("text"))
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .to_string();
+                            let line_number = data
+                                .get("line_number")
+                                .and_then(|n| n.as_u64())
+                                .unwrap_or(0);
+                            let absolute_offset = data
+                                .get("absolute_offset")
+                                .and_then(|n| n.as_u64())
+                                .unwrap_or(0);
+                            let line_text = data
+                                .get("lines")
+                                .and_then(|l| l.get("text"))
+                                .and_then(|t| t.as_str())
+                                .unwrap_or("")
+                                .trim_end_matches('\n')
+                                .to_string();
+
+                            let mut submatches = Vec::new();
+                            if let Some(sms) = data.get("submatches").and_then(|s| s.as_array()) {
+                                for sm in sms {
+                                    let text = sm
+                                        .get("match")
+                                        .and_then(|m| m.get("text"))
+                                        .and_then(|t| t.as_str())
+                                        .unwrap_or("")
+                                        .to_string();
+                                    let start =
+                                        sm.get("start").and_then(|n| n.as_u64()).unwrap_or(0)
+                                            as usize;
+                                    let end = sm.get("end").and_then(|n| n.as_u64()).unwrap_or(0)
+                                        as usize;
+                                    submatches.push(SearchSubmatch { text, start, end });
                                 }
                             }
-                            if let Ok(value) = serde_json::from_str::<serde_json::Value>(line) {
-                                if value.get("type").and_then(|t| t.as_str()) == Some("match") {
-                                    if let Some(data) = value.get("data") {
-                                        let path_str = data
-                                            .get("path")
-                                            .and_then(|p| p.get("text"))
-                                            .and_then(|t| t.as_str())
-                                            .unwrap_or("")
-                                            .to_string();
-                                        let line_number = data
-                                            .get("line_number")
-                                            .and_then(|n| n.as_u64())
-                                            .unwrap_or(0);
-                                        let absolute_offset = data
-                                            .get("absolute_offset")
-                                            .and_then(|n| n.as_u64())
-                                            .unwrap_or(0);
-                                        let line_text = data
-                                            .get("lines")
-                                            .and_then(|l| l.get("text"))
-                                            .and_then(|t| t.as_str())
-                                            .unwrap_or("")
-                                            .trim_end_matches('\n')
-                                            .to_string();
 
-                                        let mut submatches = Vec::new();
-                                        if let Some(sms) =
-                                            data.get("submatches").and_then(|s| s.as_array())
-                                        {
-                                            for sm in sms {
-                                                let text = sm
-                                                    .get("match")
-                                                    .and_then(|m| m.get("text"))
-                                                    .and_then(|t| t.as_str())
-                                                    .unwrap_or("")
-                                                    .to_string();
-                                                let start = sm
-                                                    .get("start")
-                                                    .and_then(|n| n.as_u64())
-                                                    .unwrap_or(0)
-                                                    as usize;
-                                                let end = sm
-                                                    .get("end")
-                                                    .and_then(|n| n.as_u64())
-                                                    .unwrap_or(0)
-                                                    as usize;
-                                                submatches.push(SearchSubmatch {
-                                                    text,
-                                                    start,
-                                                    end,
-                                                });
-                                            }
-                                        }
-
-                                        results.push(SearchMatch {
-                                            path: path_str,
-                                            line_number,
-                                            absolute_offset,
-                                            line_text,
-                                            submatches,
-                                        });
-                                    }
-                                }
-                            }
+                            results.push(SearchMatch {
+                                path: path_str,
+                                line_number,
+                                absolute_offset,
+                                line_text,
+                                submatches,
+                            });
                         }
                     }
                 }
@@ -1228,11 +1216,11 @@ fn py_files_with_info_impl(
         }
 
         let path = haystack.path();
-        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix, roots) {
-            if let Ok(metadata) = std::fs::metadata(path) {
-                let info = create_file_info(path_str.clone(), &metadata);
-                results.insert(path_str, info);
-            }
+        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix, roots)
+            && let Ok(metadata) = std::fs::metadata(path)
+        {
+            let info = create_file_info(path_str.clone(), &metadata);
+            results.insert(path_str, info);
         }
     }
 
@@ -1283,13 +1271,13 @@ fn py_files_with_info_impl_parallel(
             };
 
             let path = haystack.path();
-            if let Some(path_str) = normalize_and_strip(path, absolute, prefix, roots) {
-                if let Ok(metadata) = std::fs::metadata(path) {
-                    let info = create_file_info(path_str.clone(), &metadata);
-                    match tx.send((path_str, info)) {
-                        Ok(_) => return WalkState::Continue,
-                        Err(_) => return WalkState::Quit,
-                    }
+            if let Some(path_str) = normalize_and_strip(path, absolute, prefix, roots)
+                && let Ok(metadata) = std::fs::metadata(path)
+            {
+                let info = create_file_info(path_str.clone(), &metadata);
+                match tx.send((path_str, info)) {
+                    Ok(_) => return WalkState::Continue,
+                    Err(_) => return WalkState::Quit,
                 }
             }
 
