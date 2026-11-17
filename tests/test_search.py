@@ -52,3 +52,19 @@ def test_search_output_independent_of_tty(tree: Path):
     finally:
         os.close(slave)
     assert proc.stderr == repr(["foo 5\n"])
+
+
+def test_search_without_paths_ignores_stdin(tree: Path):
+    """Without paths, search the cwd even when stdin is a readable pipe."""
+    code = "import ripgrep_rs; print(sorted(ripgrep_rs.search(['foo'])))"
+    proc = subprocess.run(
+        [sys.executable, "-c", code],
+        input="foo from stdin\n",
+        capture_output=True,
+        text=True,
+        cwd=tree,
+        timeout=30,
+        check=True,
+    )
+    assert "stdin" not in proc.stdout
+    assert "foo 5" in proc.stdout

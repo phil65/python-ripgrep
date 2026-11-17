@@ -1090,36 +1090,12 @@ impl Paths {
                 is_one_file,
             });
         }
-        // N.B. is_readable_stdin is a heuristic! Part of the issue is that a
-        // lot of "exec process" APIs will open a stdin pipe even though stdin
-        // isn't really being used. ripgrep then thinks it should search stdin
-        // and one gets the appearance of it hanging. It's a terrible failure
-        // mode, but there really is no good way to mitigate it. It's just a
-        // consequence of letting the user type 'rg foo' and "guessing" that
-        // they meant to search the CWD.
-        let is_readable_stdin = grep::cli::is_readable_stdin();
-        let use_cwd =
-            !is_readable_stdin || state.stdin_consumed || !matches!(low.mode, Mode::Search(_));
-        log::debug!(
-            "using heuristics to determine whether to read from \
-             stdin or search ./ (\
-             is_readable_stdin={is_readable_stdin}, \
-             stdin_consumed={stdin_consumed}, \
-             mode={mode:?})",
-            stdin_consumed = state.stdin_consumed,
-            mode = low.mode,
-        );
-        let (path, is_one_file) = if use_cwd {
-            log::debug!("heuristic chose to search ./");
-            (PathBuf::from("./"), false)
-        } else {
-            log::debug!("heuristic chose to search stdin");
-            (PathBuf::from("-"), true)
-        };
+        // Unlike the CLI, never guess that stdin should be searched: the
+        // host process's stdin is often an unrelated (or never-closed) pipe.
         Ok(Paths {
-            paths: vec![path],
+            paths: vec![PathBuf::from("./")],
             has_implicit_path: true,
-            is_one_file,
+            is_one_file: false,
         })
     }
 
