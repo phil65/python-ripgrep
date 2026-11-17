@@ -744,6 +744,7 @@ impl HiArgs {
             .invert_match(self.invert_match)
             .line_number(self.line_number)
             .multi_line(self.multiline)
+            .max_matches(self.max_count)
             .memory_map(self.mmap_choice.clone())
             .stop_on_nonmatch(self.stop_on_nonmatch);
         match self.context {
