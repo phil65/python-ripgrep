@@ -34,14 +34,14 @@ jobs:
         if: runner.os != 'Windows'
         run: |
           source .venv/bin/activate
-          pip install maturin pytest
+          python -m pip install -U pip maturin pytest
           maturin develop
 
       - name: Activate venv and build package (Windows)
         if: runner.os == 'Windows'
         run: |
           .venv\Scripts\activate
-          pip install maturin pytest
+          python -m pip install -U pip maturin pytest
           maturin develop
 
       - name: Run tests (Unix)
