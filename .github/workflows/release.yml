@@ -9,11 +9,6 @@ permissions:
   contents: read
   id-token: write # Required for trusted publishing
 
-env:
-  # Python versions to build wheels for
-  # Include both standard and free-threaded (t suffix) versions
-  PYTHON_VERSIONS: "3.12 3.13 3.13t 3.14 3.14t 3.15 3.15t"
-
 jobs:
   linux:
     runs-on: ubuntu-latest
@@ -35,13 +30,13 @@ jobs:
       - name: Install free-threaded Python
         uses: astral-sh/setup-uv@v6
 
-      - run: uv python install 3.13t 3.14t 3.15t
+      - run: uv python install 3.14t 3.15t
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -i python3.12 -i python3.13 -i python3.13t -i python3.14 -i python3.14t -i python3.15 -i python3.15t
+          args: --release --out dist -i python3.12 -i python3.13 -i python3.14 -i python3.14t -i python3.15 -i python3.15t
           sccache: "true"
           manylinux: auto
 
@@ -101,13 +96,13 @@ jobs:
       - name: Install free-threaded Python
         uses: astral-sh/setup-uv@v6
 
-      - run: uv python install 3.13t 3.14t 3.15t
+      - run: uv python install 3.14t 3.15t
 
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist -i python3.12 -i python3.13 -i python3.13t -i python3.14 -i python3.14t -i python3.15 -i python3.15t
+          args: --release --out dist -i python3.12 -i python3.13 -i python3.14 -i python3.14t -i python3.15 -i python3.15t
           sccache: "true"
 
       - name: Upload wheels
