@@ -721,6 +721,16 @@ impl HiArgs {
         Ok(builder.build(matcher, searcher, printer))
     }
 
+    /// Binary detection for a haystack: lenient for explicitly given paths,
+    /// skipping binary files found while walking directories.
+    pub(crate) fn binary_detection(&self, haystack: &Haystack) -> grep::searcher::BinaryDetection {
+        if haystack.is_explicit() {
+            self.binary.explicit.clone()
+        } else {
+            self.binary.implicit.clone()
+        }
+    }
+
     /// Build a searcher from the command line parameters.
     pub(crate) fn searcher(&self) -> anyhow::Result<grep::searcher::Searcher> {
         let line_term = if self.crlf {

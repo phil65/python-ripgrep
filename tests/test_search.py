@@ -17,6 +17,27 @@ def tree(tmp_path: Path) -> Path:
     return tmp_path
 
 
+@pytest.fixture
+def tree_with_binary(tree: Path) -> Path:
+    (tree / "blob.bin").write_bytes(b"\x00\x01foo binary\n")
+    return tree
+
+
+def test_search_structured_skips_binary_files(tree_with_binary: Path):
+    matches = search_structured(["foo"], paths=[str(tree_with_binary)])
+    assert "blob.bin" not in {Path(m.path).name for m in matches}
+
+
+def test_search_json_skips_binary_files(tree_with_binary: Path):
+    result = search(["foo"], paths=[str(tree_with_binary)], json=True)
+    assert not any("blob.bin" in chunk for chunk in result)
+
+
+def test_search_skips_binary_files(tree_with_binary: Path):
+    result = search(["foo"], paths=[str(tree_with_binary)])
+    assert not any("blob.bin" in chunk for chunk in result)
+
+
 def test_search_max_count(tree: Path):
     result = search(["foo"], paths=[str(tree / "a.txt")], max_count=1)
     assert result == ["foo 1\n"]

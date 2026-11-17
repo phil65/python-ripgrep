@@ -572,6 +572,7 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
 
     for haystack in haystacks {
         let mut printer_buf: Vec<u8> = vec![];
+        searcher.set_binary_detection(args.binary_detection(&haystack));
 
         let search_result = {
             let mut json_printer = args.printer_json(&mut printer_buf);
@@ -632,6 +633,7 @@ fn py_search_impl_structured(
         }
 
         let mut printer_buf: Vec<u8> = vec![];
+        searcher.set_binary_detection(args.binary_detection(&haystack));
 
         let search_result = {
             let mut json_printer = args.printer_json(&mut printer_buf);
