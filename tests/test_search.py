@@ -1,5 +1,8 @@
 """Tests for search() and search_structured()."""
 
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -24,3 +27,28 @@ def test_search_structured_max_count(tree: Path):
     per_file = {Path(m.path).name: m.line_number for m in matches}
     assert per_file == {"a.txt": 1, "b.txt": 2}
     assert len(matches) == 2
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="needs a pty")
+def test_search_output_independent_of_tty(tree: Path):
+    """Default heading/line_number must not depend on whether stdout is a tty."""
+    import pty
+
+    code = (
+        "import sys, ripgrep_rs; "
+        f"r = ripgrep_rs.search(['foo'], paths=[{str(tree / 'b.txt')!r}]); "
+        "sys.stderr.write(repr(r))"
+    )
+    _, slave = pty.openpty()
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            stdout=slave,
+            stderr=subprocess.PIPE,
+            stdin=subprocess.DEVNULL,
+            text=True,
+            check=True,
+        )
+    finally:
+        os.close(slave)
+    assert proc.stderr == repr(["foo 5\n"])

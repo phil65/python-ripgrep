@@ -63,7 +63,6 @@ pub(crate) struct HiArgs {
     ignore_file: Vec<PathBuf>,
     include_zero: bool,
     invert_match: bool,
-    is_terminal_stdout: bool,
     line_number: bool,
     max_columns: Option<u64>,
     max_columns_preview: bool,
@@ -152,14 +151,15 @@ impl HiArgs {
         let globs = globs(&state, &low)?;
         let pre_globs = preprocessor_globs(&state, &low)?;
 
+        // Library output is never a terminal, so auto-color and tty-dependent
+        // defaults (heading, line numbers) resolve as if stdout were piped.
         let color = match low.color {
-            ColorChoice::Auto if !state.is_terminal_stdout => ColorChoice::Never,
+            ColorChoice::Auto => ColorChoice::Never,
             _ => low.color,
         };
         let column = low.column.unwrap_or(low.vimgrep);
         let heading = match low.heading {
-            None => !low.vimgrep && state.is_terminal_stdout,
-            Some(false) => false,
+            None | Some(false) => false,
             Some(true) => !low.vimgrep,
         };
         let path_terminator = if low.null { Some(b'\x00') } else { None };
@@ -209,14 +209,7 @@ impl HiArgs {
                 | SearchMode::Count
                 | SearchMode::CountMatches => return false,
                 SearchMode::JSON => return true,
-                SearchMode::Standard => {
-                    // A few things can imply counting line numbers. In
-                    // particular, we generally want to show line numbers by
-                    // default when printing to a tty for human consumption,
-                    // except for one interesting case: when we're only
-                    // searching stdin. This makes pipelines work as expected.
-                    (state.is_terminal_stdout && !paths.is_only_stdin()) || column || low.vimgrep
-                }
+                SearchMode::Standard => column || low.vimgrep,
             }
         });
 
@@ -278,7 +271,6 @@ impl HiArgs {
             ignore_file_case_insensitive: low.ignore_file_case_insensitive,
             include_zero: low.include_zero,
             invert_match: low.invert_match,
-            is_terminal_stdout: state.is_terminal_stdout,
             line_number,
             max_columns: low.max_columns,
             max_columns_preview: low.max_columns_preview,
@@ -844,26 +836,6 @@ impl HiArgs {
         self.stats.clone()
     }
 
-    /// Returns a color-enabled writer for stdout.
-    ///
-    /// The writer returned is also configured to do either line or block
-    /// buffering, based on either explicit configuration from the user via CLI
-    /// flags, or automatically based on whether stdout is connected to a tty.
-    pub(crate) fn stdout(&self) -> grep::cli::StandardStream {
-        let color = self.color.to_termcolor();
-        match self.buffer {
-            BufferMode::Auto => {
-                if self.is_terminal_stdout {
-                    grep::cli::stdout_buffered_line(color)
-                } else {
-                    grep::cli::stdout_buffered_block(color)
-                }
-            }
-            BufferMode::Line => grep::cli::stdout_buffered_line(color),
-            BufferMode::Block => grep::cli::stdout_buffered_block(color),
-        }
-    }
-
     /// Returns the total number of threads ripgrep should use to execute a
     /// search.
     ///
@@ -955,10 +927,6 @@ impl HiArgs {
 /// generated.
 #[derive(Debug)]
 struct State {
-    /// Whether it's believed that tty is connected to stdout. Note that on
-    /// unix systems, this is always correct. On Windows, heuristics are used
-    /// by Rust's standard library, particularly for cygwin/MSYS environments.
-    is_terminal_stdout: bool,
     /// Whether stdin has already been consumed. This is useful to know and for
     /// providing good error messages when the user has tried to read from stdin
     /// in two different places. For example, `rg -f - -`.
@@ -973,10 +941,7 @@ impl State {
     /// Note that the state values may change throughout the lifetime of
     /// argument parsing.
     fn new() -> anyhow::Result<State> {
-        use std::io::IsTerminal;
-
         Ok(State {
-            is_terminal_stdout: std::io::stdout().is_terminal(),
             stdin_consumed: false,
             cwd: current_dir()?,
         })
