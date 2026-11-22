@@ -6,7 +6,7 @@ Thank you for your interest in contributing to python-ripgrep!
 
 ### Prerequisites
 
-- Python 3.10 or higher
+- Python 3.12 or higher
 - Rust toolchain (install from https://rustup.rs/)
 - maturin (`pip install maturin`)
 
@@ -14,14 +14,16 @@ Thank you for your interest in contributing to python-ripgrep!
 
 ```bash
 # Clone the repository
-git clone https://github.com/indent-com/python-ripgrep.git
+git clone https://github.com/phil65/python-ripgrep.git
 cd python-ripgrep
 
-# Build and install in development mode
+# Build and install in development mode (inside a virtualenv)
+pip install maturin pytest
 maturin develop
 
 # Run tests
 python test.py
+pytest tests/
 ```
 
 ### Making Changes
@@ -35,16 +37,16 @@ python test.py
 ### Code Style
 
 - Rust code should follow standard Rust formatting (`cargo fmt`)
-- Run clippy for linting (`cargo clippy`)
+- Run clippy for linting (`cargo clippy --all-targets --all-features -- -D warnings`)
 - Ensure all tests pass before submitting
 
 ## Adding New Features
 
 To add new ripgrep options:
 
-1. Update the `PyArgs` struct in `src/ripgrep_core.rs`
+1. Add the parameter to the relevant `#[pyfunction]` (signature and arguments) and to the `PyArgs` struct in `src/ripgrep_core.rs`
 2. Modify the `pyargs_to_hiargs` function to handle the new option
-3. Update the Python wrapper code if needed
+3. Update the type stubs in `ripgrep_rs/__init__.pyi`
 4. Add tests for the new functionality
 5. Update the README with the new feature
 
@@ -52,7 +54,7 @@ To add new ripgrep options:
 
 Releases are automated via GitHub Actions:
 
-1. Update version in `pyproject.toml` and `Cargo.toml`
+1. Update the version in `Cargo.toml` (`pyproject.toml` reads it dynamically)
 2. Create a new GitHub release
 3. Wheels will be built and published to PyPI automatically
 
