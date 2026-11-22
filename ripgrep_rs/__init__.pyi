@@ -1,40 +1,81 @@
-import enum
+from typing import ClassVar, final
 
+__all__ = [
+    "FileInfo",
+    "PySortMode",
+    "PySortModeKind",
+    "SearchMatch",
+    "SearchSubmatch",
+    "files",
+    "files_with_info",
+    "search",
+    "search_structured",
+]
+
+@final
+class PySortModeKind:
+    """What to sort results by (a PyO3 enum, not an `enum.Enum`)."""
+
+    Path: ClassVar[PySortModeKind]
+    LastModified: ClassVar[PySortModeKind]
+    LastAccessed: ClassVar[PySortModeKind]
+    Created: ClassVar[PySortModeKind]
+
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+    def __int__(self) -> int: ...
+
+@final
 class PySortMode:
-    kind: PySortModeKind
-    reverse: bool = False
+    """Sort order for `search`, `search_structured`, `files` and `files_with_info`."""
 
-    def __init__(self, kind: PySortModeKind, reverse: bool = False): ...
+    __hash__: ClassVar[None]  # type: ignore[assignment]
+    def __new__(cls, kind: PySortModeKind, reverse: bool = False) -> PySortMode: ...
+    @property
+    def kind(self) -> PySortModeKind: ...
+    @property
+    def reverse(self) -> bool: ...
 
-class PySortModeKind(enum.Enum):
-    Path = enum.auto()
-    LastModified = enum.auto()
-    LastAccessed = enum.auto()
-    Created = enum.auto()
-
+@final
 class SearchSubmatch:
     """A single submatch within a search match line."""
 
-    text: str
-    """The matched text."""
-    start: int
-    """Byte offset of match start within the line."""
-    end: int
-    """Byte offset of match end within the line."""
+    @property
+    def text(self) -> str:
+        """The matched text."""
+        ...
+    @property
+    def start(self) -> int:
+        """Byte offset of match start within the line."""
+        ...
+    @property
+    def end(self) -> int:
+        """Byte offset of match end within the line."""
+        ...
 
+@final
 class SearchMatch:
     """A single search match (one matching line)."""
 
-    path: str
-    """File path (relative or absolute depending on search args)."""
-    line_number: int
-    """1-based line number."""
-    absolute_offset: int
-    """Absolute byte offset from the start of the file."""
-    line_text: str
-    """The text of the matching line (trimmed trailing newline)."""
-    submatches: list[SearchSubmatch]
-    """Individual submatches within this line."""
+    @property
+    def path(self) -> str:
+        """File path (relative or absolute depending on search args)."""
+        ...
+    @property
+    def line_number(self) -> int:
+        """1-based line number."""
+        ...
+    @property
+    def absolute_offset(self) -> int:
+        """Absolute byte offset from the start of the file."""
+        ...
+    @property
+    def line_text(self) -> str:
+        """The text of the matching line (trimmed trailing newline)."""
+        ...
+    @property
+    def submatches(self) -> list[SearchSubmatch]:
+        """Individual submatches within this line."""
+        ...
 
 def search(
     patterns: list[str],
@@ -103,31 +144,54 @@ def files(
     relative_to: str | None = None,
 ) -> list[str]: ...
 
+@final
 class FileInfo:
     """File information returned by files_with_info."""
 
-    name: str
-    """Full path to the file."""
-    size: int
-    """File size in bytes."""
-    type: str
-    """File type: 'file' or 'directory'."""
-    created: float
-    """Creation time as Unix timestamp."""
-    islink: bool
-    """Whether the file is a symlink."""
-    mode: int
-    """File mode/permissions."""
-    uid: int
-    """User ID (Unix only, 0 on Windows)."""
-    gid: int
-    """Group ID (Unix only, 0 on Windows)."""
-    mtime: float
-    """Modification time as Unix timestamp."""
-    ino: int
-    """Inode number (Unix only, 0 on Windows)."""
-    nlink: int
-    """Number of hard links."""
+    @property
+    def name(self) -> str:
+        """Full path to the file."""
+        ...
+    @property
+    def size(self) -> int:
+        """File size in bytes."""
+        ...
+    @property
+    def type(self) -> str:
+        """File type: 'file' or 'directory'."""
+        ...
+    @property
+    def created(self) -> float:
+        """Creation time as Unix timestamp."""
+        ...
+    @property
+    def islink(self) -> bool:
+        """Whether the file is a symlink."""
+        ...
+    @property
+    def mode(self) -> int:
+        """File mode/permissions."""
+        ...
+    @property
+    def uid(self) -> int:
+        """User ID (Unix only, 0 on Windows)."""
+        ...
+    @property
+    def gid(self) -> int:
+        """Group ID (Unix only, 0 on Windows)."""
+        ...
+    @property
+    def mtime(self) -> float:
+        """Modification time as Unix timestamp."""
+        ...
+    @property
+    def ino(self) -> int:
+        """Inode number (Unix only, 0 on Windows)."""
+        ...
+    @property
+    def nlink(self) -> int:
+        """Number of hard links."""
+        ...
 
 def files_with_info(
     paths: list[str] | None = None,
