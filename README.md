@@ -1,6 +1,10 @@
 # ripgrep-rs
 
-A Python wrapper for ripgrep, providing fast and efficient text searching and file listing capabilities.
+[![PyPI](https://img.shields.io/pypi/v/ripgrep-rs.svg)](https://pypi.org/project/ripgrep-rs/)
+[![Python versions](https://img.shields.io/pypi/pyversions/ripgrep-rs.svg)](https://pypi.org/project/ripgrep-rs/)
+[![CI](https://github.com/phil65/python-ripgrep/actions/workflows/ci.yml/badge.svg)](https://github.com/phil65/python-ripgrep/actions/workflows/ci.yml)
+
+ripgrep's search and file walking as a native Python extension: regex search and `.gitignore`-aware file listing, without spawning an `rg` process.
 
 ## Description
 
@@ -8,11 +12,21 @@ ripgrep-rs is a Python package that wraps the functionality of ripgrep, a line-o
 
 Unlike many other ripgrep bindings for Python, ripgrep-rs doesn't shell out to the ripgrep command-line tool. Instead, it reimplements core ripgrep logic in Rust and provides a direct interface to Python via [PyO3](https://pyo3.rs/).
 
+## Features
+
+- `search()`: ripgrep-style formatted output (optionally JSON Lines), with context lines, headings and line numbers
+- `search_structured()`: typed `SearchMatch` objects with line numbers, byte offsets and submatches
+- `files()` / `files_with_info()`: fast directory walks that honor `.gitignore`, hidden-file and glob rules; `files_with_info()` returns fsspec-style metadata
+- Searches run multi-threaded with the GIL released; wheels for CPython 3.12-3.15 on Linux, macOS and Windows, plus free-threaded 3.14t/3.15t on Linux and macOS
+- Ships type stubs (`py.typed`)
+
 ## Installation
 
-```
+```bash
 pip install ripgrep-rs
 ```
+
+The distribution is called `ripgrep-rs`; the import name is `ripgrep_rs`.
 
 ## Usage
 
@@ -21,7 +35,7 @@ pip install ripgrep-rs
 ```python
 from ripgrep_rs import search
 
-# Perform a simple search, returning a list of string results grouped by file.
+# Returns one formatted string per file ("path:line" for each matching line).
 results = search(
     patterns=["pattern"],
     paths=["path/to/search"],
@@ -71,6 +85,19 @@ for path, info in file_info.items():
     print(f"{path}: {info.size} bytes, modified {info.mtime}")
 ```
 
+Paths are searched in parallel, so results come back in no particular order unless you pass `sort`:
+
+```python
+from ripgrep_rs import PySortMode, PySortModeKind, files
+
+newest_first = files(
+    paths=["src/"],
+    sort=PySortMode(PySortModeKind.LastModified, reverse=True),
+)
+```
+
+Invalid arguments (for example a malformed regex) raise `ValueError`.
+
 ## API Reference
 
 ### Functions
@@ -87,6 +114,9 @@ Search for regex patterns in files, returning raw formatted string results.
 | `heading` | `bool \| None` | Show file names above matching lines |
 | `after_context` | `int \| None` | Lines to show after each match |
 | `before_context` | `int \| None` | Lines to show before each match |
+| `separator_field_context` | `str \| None` | Field separator for context lines (default `-`) |
+| `separator_field_match` | `str \| None` | Field separator for matching lines (default `:`) |
+| `separator_context` | `str \| None` | Separator between non-contiguous context blocks (default `--`) |
 | `sort` | `PySortMode \| None` | Sort mode for results |
 | `max_count` | `int \| None` | Maximum matches per file |
 | `line_number` | `bool \| None` | Show line numbers |
@@ -136,7 +166,7 @@ List files that would be searched, respecting ignore rules.
 
 List files with detailed metadata, returning a dict mapping paths to `FileInfo` objects.
 
-Same parameters as `files()`.
+Same parameters as `files()`, except `max_count`.
 
 ### Classes
 
@@ -182,7 +212,7 @@ PySortMode(kind=PySortModeKind.Path, reverse=False)
 
 #### `PySortModeKind`
 
-Enum with values: `Path`, `LastModified`, `LastAccessed`, `Created`.
+PyO3 enum (not an `enum.Enum`) with members `Path`, `LastModified`, `LastAccessed`, `Created`.
 
 ## Development
 
@@ -191,9 +221,13 @@ This project uses [maturin](https://github.com/PyO3/maturin) for building the Py
 ```bash
 git clone https://github.com/phil65/python-ripgrep
 cd python-ripgrep
-pip install maturin
+python -m venv .venv && source .venv/bin/activate
+pip install maturin pytest
 maturin develop
+pytest tests/
 ```
+
+See [AGENTS.md](AGENTS.md) for the code layout.
 
 ## License
 
