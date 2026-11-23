@@ -81,6 +81,7 @@ def search(
     patterns: list[str],
     paths: list[str] | None = None,
     globs: list[str] | None = None,
+    glob_not: list[str] | None = None,
     heading: bool | None = None,
     after_context: int | None = None,
     before_context: int | None = None,
@@ -89,6 +90,7 @@ def search(
     separator_context: str | None = None,
     sort: PySortMode | None = None,
     max_count: int | None = None,
+    max_bytes: int | None = None,
     line_number: bool | None = None,
     multiline: bool | None = None,
     case_sensitive: bool | None = None,
@@ -101,8 +103,10 @@ def search_structured(
     patterns: list[str],
     paths: list[str] | None = None,
     globs: list[str] | None = None,
+    glob_not: list[str] | None = None,
     sort: PySortMode | None = None,
     max_count: int | None = None,
+    max_bytes: int | None = None,
     max_total: int | None = None,
     multiline: bool | None = None,
     case_sensitive: bool | None = None,
@@ -120,8 +124,11 @@ def search_structured(
         patterns: Regex patterns to search for.
         paths: Paths to search in.
         globs: Glob patterns to filter files.
+        glob_not: Glob patterns of files to exclude (like `rg -G`; a leading `!`
+            un-negates). Applied after `globs`, so exclusions win.
         sort: Sort mode for results.
         max_count: Maximum matches per file.
+        max_bytes: Search at most this many bytes of each file.
         max_total: Maximum total matches across all files.
         multiline: Enable multiline matching.
         case_sensitive: Force case-sensitive matching.
@@ -134,6 +141,7 @@ def search_structured(
 def files(
     paths: list[str] | None = None,
     globs: list[str] | None = None,
+    glob_not: list[str] | None = None,
     sort: PySortMode | None = None,
     max_count: int | None = None,
     no_ignore: bool | None = None,
@@ -196,6 +204,7 @@ class FileInfo:
 def files_with_info(
     paths: list[str] | None = None,
     globs: list[str] | None = None,
+    glob_not: list[str] | None = None,
     sort: PySortMode | None = None,
     no_ignore: bool | None = None,
     hidden: bool | None = None,

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from ripgrep_rs import search, search_structured
+from ripgrep_rs import files, search, search_structured
 
 
 @pytest.fixture
@@ -89,3 +89,49 @@ def test_search_without_paths_ignores_stdin(tree: Path):
     )
     assert "stdin" not in proc.stdout
     assert "foo 5" in proc.stdout
+
+
+@pytest.fixture
+def mixed_tree(tmp_path: Path) -> Path:
+    (tmp_path / "a.py").write_bytes(b"hit\n")
+    (tmp_path / "b.toml").write_bytes(b"hit\n")
+    (tmp_path / "c.txt").write_bytes(b"x" * 50 + b"\nhit late\n")
+    return tmp_path
+
+
+def _names(matches) -> list[str]:
+    return sorted(Path(m.path).name for m in matches)
+
+
+def test_glob_not_excludes(mixed_tree: Path):
+    matches = search_structured(["hit"], paths=[str(mixed_tree)], glob_not=["*.toml"])
+    assert _names(matches) == ["a.py", "c.txt"]
+
+
+def test_glob_not_wins_over_globs(mixed_tree: Path):
+    matches = search_structured(
+        ["hit"], paths=[str(mixed_tree)], globs=["*.py", "*.toml"], glob_not=["*.toml"]
+    )
+    assert _names(matches) == ["a.py"]
+
+
+def test_glob_not_leading_bang_unnegates(mixed_tree: Path):
+    # Like `rg -G '!*.py'`: the double negation is a whitelist glob.
+    matches = search_structured(["hit"], paths=[str(mixed_tree)], glob_not=["!*.py"])
+    assert _names(matches) == ["a.py"]
+
+
+def test_glob_not_in_search_and_files(mixed_tree: Path):
+    result = search(["hit"], paths=[str(mixed_tree)], glob_not=["*.py", "*.txt"])
+    assert len(result) == 1
+    assert "b.toml" in result[0]
+    listed = files(paths=[str(mixed_tree)], glob_not=["*.txt"])
+    assert sorted(Path(f).name for f in listed) == ["a.py", "b.toml"]
+
+
+def test_max_bytes_limits_each_file(mixed_tree: Path):
+    # c.txt's match starts after byte 50, the others are within the first 4 bytes.
+    matches = search_structured(["hit"], paths=[str(mixed_tree)], max_bytes=20)
+    assert _names(matches) == ["a.py", "b.toml"]
+    assert len(search(["hit"], paths=[str(mixed_tree)], max_bytes=20)) == 2
+    assert _names(search_structured(["hit"], paths=[str(mixed_tree)])) == ["a.py", "b.toml", "c.txt"]

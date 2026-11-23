@@ -72,6 +72,7 @@ pub(crate) struct LowArgs {
     pub(crate) max_columns: Option<u64>,
     pub(crate) max_columns_preview: bool,
     pub(crate) max_count: Option<u64>,
+    pub(crate) max_bytes: Option<u64>,
     pub(crate) max_depth: Option<usize>,
     pub(crate) max_filesize: Option<u64>,
     pub(crate) mmap: MmapMode,

@@ -25,6 +25,7 @@ pub struct PyArgs {
     pub patterns: Vec<String>,
     pub paths: Option<Vec<String>>,
     pub globs: Option<Vec<String>>,
+    pub glob_not: Option<Vec<String>>,
     pub heading: Option<bool>,
     pub after_context: Option<u64>,
     pub before_context: Option<u64>,
@@ -33,6 +34,7 @@ pub struct PyArgs {
     pub separator_context: Option<String>,
     pub sort: Option<PySortMode>,
     pub max_count: Option<u64>,
+    pub max_bytes: Option<u64>,
     pub line_number: Option<bool>,
     pub multiline: Option<bool>,
     pub case_sensitive: Option<bool>,
@@ -53,6 +55,7 @@ impl PyArgs {
         patterns,
         paths=None,
         globs=None,
+        glob_not=None,
         heading=None,
         after_context=None,
         before_context=None,
@@ -61,6 +64,7 @@ impl PyArgs {
         separator_context=None,
         sort=None,
         max_count=None,
+        max_bytes=None,
         line_number=None,
         multiline=None,
         case_sensitive=None,
@@ -77,6 +81,7 @@ impl PyArgs {
         patterns: Vec<String>,
         paths: Option<Vec<String>>,
         globs: Option<Vec<String>>,
+        glob_not: Option<Vec<String>>,
         heading: Option<bool>,
         after_context: Option<u64>,
         before_context: Option<u64>,
@@ -85,6 +90,7 @@ impl PyArgs {
         separator_context: Option<String>,
         sort: Option<PySortMode>,
         max_count: Option<u64>,
+        max_bytes: Option<u64>,
         line_number: Option<bool>,
         multiline: Option<bool>,
         case_sensitive: Option<bool>,
@@ -101,6 +107,7 @@ impl PyArgs {
             patterns,
             paths,
             globs,
+            glob_not,
             heading,
             after_context,
             before_context,
@@ -109,6 +116,7 @@ impl PyArgs {
             separator_context,
             sort,
             max_count,
+            max_bytes,
             line_number,
             multiline,
             case_sensitive,
@@ -286,6 +294,19 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
         low_args.globs = globs.clone();
     }
 
+    // Like ripgrep's -G/--glob-not: "x" excludes x, "!x" un-negates. Appended after
+    // `globs` so exclusions win (the last matching glob takes precedence).
+    if let Some(glob_not) = &py_args.glob_not {
+        low_args
+            .globs
+            .extend(glob_not.iter().map(|glob| match glob.strip_prefix('!') {
+                Some(unnegated) => unnegated.to_string(),
+                None => format!("!{glob}"),
+            }));
+    }
+
+    low_args.max_bytes = py_args.max_bytes;
+
     if let Some(paths) = &py_args.paths {
         low_args.positional = build_paths(paths.clone());
     }
@@ -351,6 +372,7 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     patterns,
     paths=None,
     globs=None,
+    glob_not=None,
     heading=None,
     after_context=None,
     before_context=None,
@@ -359,6 +381,7 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     separator_context=None,
     sort=None,
     max_count=None,
+    max_bytes=None,
     line_number=None,
     multiline=None,
     case_sensitive=None,
@@ -372,6 +395,7 @@ pub fn py_search(
     patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
+    glob_not: Option<Vec<String>>,
     heading: Option<bool>,
     after_context: Option<u64>,
     before_context: Option<u64>,
@@ -380,6 +404,7 @@ pub fn py_search(
     separator_context: Option<String>,
     sort: Option<PySortMode>,
     max_count: Option<u64>,
+    max_bytes: Option<u64>,
     line_number: Option<bool>,
     multiline: Option<bool>,
     case_sensitive: Option<bool>,
@@ -393,6 +418,7 @@ pub fn py_search(
             patterns,
             paths,
             globs,
+            glob_not,
             heading,
             after_context,
             before_context,
@@ -401,6 +427,7 @@ pub fn py_search(
             separator_context,
             sort,
             max_count,
+            max_bytes,
             line_number,
             multiline,
             case_sensitive,
@@ -651,8 +678,10 @@ fn py_search_impl_structured(
     patterns,
     paths=None,
     globs=None,
+    glob_not=None,
     sort=None,
     max_count=None,
+    max_bytes=None,
     max_total=None,
     multiline=None,
     case_sensitive=None,
@@ -665,8 +694,10 @@ pub fn py_search_structured(
     patterns: Vec<String>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
+    glob_not: Option<Vec<String>>,
     sort: Option<PySortMode>,
     max_count: Option<u64>,
+    max_bytes: Option<u64>,
     max_total: Option<u64>,
     multiline: Option<bool>,
     case_sensitive: Option<bool>,
@@ -679,6 +710,7 @@ pub fn py_search_structured(
             patterns,
             paths,
             globs,
+            glob_not,
             heading: None,
             after_context: None,
             before_context: None,
@@ -687,6 +719,7 @@ pub fn py_search_structured(
             separator_context: None,
             sort,
             max_count,
+            max_bytes,
             line_number: None,
             multiline,
             case_sensitive,
@@ -714,6 +747,7 @@ pub fn py_search_structured(
 #[pyo3(signature = (
     paths=None,
     globs=None,
+    glob_not=None,
     sort=None,
     max_count=None,
     no_ignore=None,
@@ -727,6 +761,7 @@ pub fn py_files(
     py: Python<'_>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
+    glob_not: Option<Vec<String>>,
     sort: Option<PySortMode>,
     max_count: Option<u64>,
     no_ignore: Option<bool>,
@@ -741,6 +776,7 @@ pub fn py_files(
             patterns: vec![],
             paths,
             globs,
+            glob_not,
             heading: None,
             after_context: None,
             before_context: None,
@@ -749,6 +785,7 @@ pub fn py_files(
             separator_context: None,
             sort,
             max_count,
+            max_bytes: None,
             line_number: None,
             multiline: None,
             case_sensitive: None,
@@ -1046,6 +1083,7 @@ fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo 
 #[pyo3(signature = (
     paths=None,
     globs=None,
+    glob_not=None,
     sort=None,
     no_ignore=None,
     hidden=None,
@@ -1058,6 +1096,7 @@ pub fn py_files_with_info(
     py: Python<'_>,
     paths: Option<Vec<String>>,
     globs: Option<Vec<String>>,
+    glob_not: Option<Vec<String>>,
     sort: Option<PySortMode>,
     no_ignore: Option<bool>,
     hidden: Option<bool>,
@@ -1071,6 +1110,7 @@ pub fn py_files_with_info(
             patterns: vec![],
             paths,
             globs,
+            glob_not,
             heading: None,
             after_context: None,
             before_context: None,
@@ -1079,6 +1119,7 @@ pub fn py_files_with_info(
             separator_context: None,
             sort,
             max_count: None,
+            max_bytes: None,
             line_number: None,
             multiline: None,
             case_sensitive: None,

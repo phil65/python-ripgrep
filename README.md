@@ -111,6 +111,7 @@ Search for regex patterns in files, returning raw formatted string results.
 | `patterns` | `list[str]` | Regex patterns to search for |
 | `paths` | `list[str] \| None` | Paths to search in |
 | `globs` | `list[str] \| None` | Glob patterns to filter files |
+| `glob_not` | `list[str] \| None` | Glob patterns of files to exclude (like `rg -G`); applied after `globs`, so exclusions win |
 | `heading` | `bool \| None` | Show file names above matching lines |
 | `after_context` | `int \| None` | Lines to show after each match |
 | `before_context` | `int \| None` | Lines to show before each match |
@@ -119,6 +120,7 @@ Search for regex patterns in files, returning raw formatted string results.
 | `separator_context` | `str \| None` | Separator between non-contiguous context blocks (default `--`) |
 | `sort` | `PySortMode \| None` | Sort mode for results |
 | `max_count` | `int \| None` | Maximum matches per file |
+| `max_bytes` | `int \| None` | Search at most this many bytes of each file |
 | `line_number` | `bool \| None` | Show line numbers |
 | `multiline` | `bool \| None` | Enable multiline matching |
 | `case_sensitive` | `bool \| None` | Force case-sensitive matching |
@@ -136,8 +138,10 @@ Search for regex patterns, returning parsed `SearchMatch` objects.
 | `patterns` | `list[str]` | Regex patterns to search for |
 | `paths` | `list[str] \| None` | Paths to search in |
 | `globs` | `list[str] \| None` | Glob patterns to filter files |
+| `glob_not` | `list[str] \| None` | Glob patterns of files to exclude (like `rg -G`); applied after `globs`, so exclusions win |
 | `sort` | `PySortMode \| None` | Sort mode for results |
 | `max_count` | `int \| None` | Maximum matches per file |
+| `max_bytes` | `int \| None` | Search at most this many bytes of each file |
 | `max_total` | `int \| None` | Maximum total matches across all files |
 | `multiline` | `bool \| None` | Enable multiline matching |
 | `case_sensitive` | `bool \| None` | Force case-sensitive matching |
@@ -153,6 +157,7 @@ List files that would be searched, respecting ignore rules.
 |-----------|------|-------------|
 | `paths` | `list[str] \| None` | Paths to search in |
 | `globs` | `list[str] \| None` | Glob patterns to filter files |
+| `glob_not` | `list[str] \| None` | Glob patterns of files to exclude (like `rg -G`); applied after `globs`, so exclusions win |
 | `sort` | `PySortMode \| None` | Sort mode for results |
 | `max_count` | `int \| None` | Maximum number of files |
 | `no_ignore` | `bool \| None` | Don't respect .gitignore |
