@@ -452,7 +452,6 @@ dependencies = [
  "rayon",
  "regex",
  "same-file",
- "serde_json",
  "termcolor",
  "walkdir",
 ]

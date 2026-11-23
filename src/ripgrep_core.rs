@@ -15,8 +15,11 @@ mod haystack;
 mod hiargs;
 mod lowargs;
 mod search;
+mod structured;
 #[macro_use]
 mod messages;
+
+use structured::StructuredSink;
 
 #[pyclass]
 pub struct PyArgs {
@@ -626,93 +629,26 @@ fn py_search_impl_structured(
     let max_total = max_total.map(|m| m as usize);
 
     for haystack in haystacks {
-        if let Some(max) = max_total
-            && results.len() >= max
-        {
+        let remaining = max_total.map(|max| max - results.len());
+        if remaining == Some(0) {
             break;
         }
 
-        let mut printer_buf: Vec<u8> = vec![];
         searcher.set_binary_detection(args.binary_detection(&haystack));
+        let path = haystack.path();
+        let path_str = path.to_string_lossy();
 
-        let search_result = {
-            let mut json_printer = args.printer_json(&mut printer_buf);
-            let path = haystack.path();
-
-            match &matcher {
-                PatternMatcher::RustRegex(m) => {
-                    let mut sink = json_printer.sink_with_path(m, path);
-                    searcher.search_path(m, path, &mut sink)
-                }
+        let search_result = match &matcher {
+            PatternMatcher::RustRegex(m) => {
+                let mut sink = StructuredSink::new(m, &path_str, remaining);
+                searcher
+                    .search_path(m, path, &mut sink)
+                    .map(|()| sink.matches)
             }
         };
 
         match search_result {
-            Ok(_) => {
-                if !printer_buf.is_empty()
-                    && let Ok(s) = String::from_utf8(printer_buf)
-                {
-                    for line in s.lines() {
-                        if let Some(max) = max_total
-                            && results.len() >= max
-                        {
-                            break;
-                        }
-                        if let Ok(value) = serde_json::from_str::<serde_json::Value>(line)
-                            && value.get("type").and_then(|t| t.as_str()) == Some("match")
-                            && let Some(data) = value.get("data")
-                        {
-                            let path_str = data
-                                .get("path")
-                                .and_then(|p| p.get("text"))
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .to_string();
-                            let line_number = data
-                                .get("line_number")
-                                .and_then(|n| n.as_u64())
-                                .unwrap_or(0);
-                            let absolute_offset = data
-                                .get("absolute_offset")
-                                .and_then(|n| n.as_u64())
-                                .unwrap_or(0);
-                            let line_text = data
-                                .get("lines")
-                                .and_then(|l| l.get("text"))
-                                .and_then(|t| t.as_str())
-                                .unwrap_or("")
-                                .trim_end_matches('\n')
-                                .to_string();
-
-                            let mut submatches = Vec::new();
-                            if let Some(sms) = data.get("submatches").and_then(|s| s.as_array()) {
-                                for sm in sms {
-                                    let text = sm
-                                        .get("match")
-                                        .and_then(|m| m.get("text"))
-                                        .and_then(|t| t.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    let start =
-                                        sm.get("start").and_then(|n| n.as_u64()).unwrap_or(0)
-                                            as usize;
-                                    let end = sm.get("end").and_then(|n| n.as_u64()).unwrap_or(0)
-                                        as usize;
-                                    submatches.push(SearchSubmatch { text, start, end });
-                                }
-                            }
-
-                            results.push(SearchMatch {
-                                path: path_str,
-                                line_number,
-                                absolute_offset,
-                                line_text,
-                                submatches,
-                            });
-                        }
-                    }
-                }
-            }
+            Ok(matches) => results.extend(matches),
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
             Err(err) => {
                 err_message!("{}: {}", haystack.path().display(), err);
