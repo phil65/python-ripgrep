@@ -2,6 +2,7 @@
 name = "ripgrep_rs"
 version = "0.4.3"
 edition = "2024"
+rust-version = "1.96"
 
 [lib]
 crate-type = ["cdylib"]
@@ -11,7 +12,6 @@ name = "ripgrep_rs"
 anyhow = "1.0"
 bstr = "1.12"
 # Dependencies for ripgrep_core
-glob = "0.3"
 grep = "0.4"
 grep-cli = "0.1"
 grep-matcher = "0.1"
@@ -20,13 +20,10 @@ grep-regex = "0.1"
 grep-searcher = "0.1"
 ignore = "0.4"
 log = "0.4"
-num_cpus = "1.17"
 pyo3 = { version = "0.28.2", features = [
   "extension-module",
   "generate-import-lib"
 ] }
-rayon = "1.11"
-regex = "1.12"
 same-file = "1.0"
 termcolor = "1.4"
 walkdir = "2.5"

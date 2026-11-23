@@ -25,10 +25,12 @@ Rust <-> Python boundary:
     `HiArgs::from_low_args`. New options go here.
   - `py_search_impl*` / `py_files_impl*` / `py_files_with_info_impl*`: sequential and parallel
     (`ignore` walker) variants. Output is collected into in-memory buffers, not stdout.
-    `search_structured` runs JSON mode internally and parses it with `serde_json`.
+    `search_structured` collects matches with its own `Sink` (`structured.rs`), no JSON round-trip.
   - Path handling: `normalize_path`, `normalize_separators`, `normalize_and_strip`,
     `build_relative_prefix` (absolute paths, `relative_to`, Windows `\\?\` and separators).
   - Errors from argument building or searching are raised as `ValueError`.
+- `src/ripgrep_core/structured.rs`: `StructuredSink`, builds `SearchMatch` values directly; its
+  submatch logic mirrors grep-printer's JSON sink, so results match `json=True`.
 - `src/ripgrep_core/{lowargs,hiargs,haystack,search,messages}.rs`: adapted from ripgrep's
   `crates/core`. `lowargs.rs` = flag values and defaults, `hiargs.rs` = derived config (matcher,
   printer, walker builders), `search.rs` = search worker, `haystack.rs` = which entries get
@@ -68,7 +70,7 @@ cargo fmt --all -- --check      # CI lint job
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test                      # compiles; there are no Rust unit tests
 python -P benchmarks/bench.py   # benchmarks; -P so the source dir doesn't shadow the build
-python -m mypy.stubtest ripgrep_rs   # check the stub against the built module (needs mypy)
+python -m mypy.stubtest ripgrep_rs --ignore-missing-stub   # stub vs built module (needs mypy)
 ```
 
 `duties.py` wraps some of these (`duty develop`, `duty lint`, `duty lint_check`, `duty update`).
