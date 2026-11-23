@@ -3,7 +3,6 @@ use ignore::WalkState;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::{
-    borrow::BorrowMut,
     collections::HashMap,
     ffi::{OsStr, OsString},
     sync::mpsc,
@@ -467,35 +466,25 @@ fn py_search_impl(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     let mut searcher = args.search_worker(args_matcher, args_searcher, args_printer)?;
 
     for haystack in haystacks {
-        let search_result = match searcher.search(&haystack) {
-            Ok(search_result) => search_result,
+        match searcher.search(&haystack) {
+            Ok(_) => {}
             // A broken pipe means graceful termination.
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
+            // Keep what was printed before the error (ripgrep 16, #3382).
             Err(err) => {
                 err_message!("{}: {}", haystack.path().display(), err);
-                continue;
             }
-        };
-
-        if search_result.has_match() {
-            let printer = searcher.printer();
-            let results_vec = printer.get_mut().borrow_mut();
-
-            // Only include results for valid UTF-8 files
-            match String::from_utf8(results_vec.get_ref().clone()) {
-                Ok(results_str) => {
-                    results.push(results_str);
-                }
-                Err(_) => {
-                    // Skip this file as it contains invalid UTF-8 data
-                    // (likely a binary file or file with a different encoding)
-                }
-            }
-
-            let p = searcher.printer().borrow_mut();
-            let p_inner = p.get_mut();
-            p_inner.get_mut().clear();
         }
+
+        let buf = searcher.printer().get_mut().get_mut();
+        // Only include results for valid UTF-8 output (skips binary or
+        // differently encoded files).
+        if !buf.is_empty()
+            && let Ok(results_str) = String::from_utf8(buf.clone())
+        {
+            results.push(results_str);
+        }
+        buf.clear();
     }
 
     Ok(results)
@@ -528,26 +517,22 @@ fn py_search_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
             // Clear the printer buffer for this file
             searcher.printer().get_mut().get_mut().clear();
 
-            let search_result = match searcher.search(&haystack) {
-                Ok(search_result) => search_result,
+            match searcher.search(&haystack) {
+                Ok(_) => {}
                 Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
                     return WalkState::Quit;
                 }
-                Err(_) => {
-                    return WalkState::Continue;
-                }
-            };
+                // Keep what was printed before the error (ripgrep 16, #3382).
+                Err(_) => {}
+            }
 
-            if search_result.has_match() {
-                let printer = searcher.printer();
-                let results_vec = printer.get_mut();
-
-                // Only include results for valid UTF-8 files
-                if let Ok(results_str) = String::from_utf8(results_vec.get_ref().clone())
-                    && let Ok(mut guard) = results.lock()
-                {
-                    guard.push(results_str);
-                }
+            let buf = searcher.printer().get_mut().get_ref();
+            // Only include results for valid UTF-8 output
+            if !buf.is_empty()
+                && let Ok(results_str) = String::from_utf8(buf.clone())
+                && let Ok(mut guard) = results.lock()
+            {
+                guard.push(results_str);
             }
 
             WalkState::Continue
