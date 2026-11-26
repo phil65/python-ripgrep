@@ -164,7 +164,7 @@ List files that would be searched, respecting ignore rules.
 | `hidden` | `bool \| None` | Include hidden files |
 | `include_dirs` | `bool \| None` | Include directories in results |
 | `max_depth` | `int \| None` | Maximum directory depth |
-| `absolute` | `bool \| None` | Return absolute paths |
+| `absolute` | `bool \| None` | Return absolute paths (lexical: symlinks are not resolved) |
 | `relative_to` | `str \| None` | Strip this prefix from paths |
 
 #### `files_with_info(...)`

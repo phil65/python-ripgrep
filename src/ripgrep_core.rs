@@ -3,8 +3,10 @@ use ignore::WalkState;
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use std::{
+    borrow::Cow,
     collections::HashMap,
     ffi::{OsStr, OsString},
+    path::{Component, Path, PathBuf},
     sync::mpsc,
     thread,
     time::UNIX_EPOCH,
@@ -823,16 +825,101 @@ pub fn py_files(
     })
 }
 
-/// Build a prefix string for stripping relative paths.
-/// Normalizes separators to the platform default for consistent matching.
-fn build_relative_prefix(relative_to: Option<&str>) -> Option<String> {
-    relative_to.map(|p| {
-        let mut s = normalize_separators(p);
-        if !s.ends_with(std::path::MAIN_SEPARATOR) {
-            s.push(std::path::MAIN_SEPARATOR);
+/// Turns walked paths into the strings `files` / `files_with_info` return: made absolute
+/// (lexically: symlinks are not resolved, so paths stay under the root that was asked
+/// for), `relative_to` stripped, the root directories themselves dropped.
+struct PathFormat {
+    /// The working directory, set when absolute paths were requested.
+    cwd: Option<PathBuf>,
+    prefix: Option<String>,
+    roots: Vec<String>,
+}
+
+impl PathFormat {
+    fn new(absolute: bool, relative_to: Option<&str>, roots: &[String]) -> Self {
+        let cwd = absolute.then(|| std::env::current_dir().unwrap_or_default());
+        let mut format = PathFormat {
+            cwd,
+            prefix: None,
+            roots: Vec::new(),
+        };
+        // In absolute mode, the prefix and roots go through the same normalization as the
+        // walked paths, so they compare equal.
+        let normalize = |p: &str| {
+            let p = normalize_separators(p);
+            format.normalize(Path::new(&p)).unwrap_or(p)
+        };
+        let prefix = relative_to.map(|p| {
+            let mut s = normalize(p);
+            if !s.ends_with(std::path::MAIN_SEPARATOR) {
+                s.push(std::path::MAIN_SEPARATOR);
+            }
+            s
+        });
+        let roots = roots
+            .iter()
+            .map(|root| normalize(root).trim_end_matches(['/', '\\']).to_string())
+            .collect();
+        format.prefix = prefix;
+        format.roots = roots;
+        format
+    }
+
+    /// Make a path absolute (if requested) without touching the file system.
+    fn normalize(&self, path: &Path) -> Option<String> {
+        let Some(cwd) = &self.cwd else {
+            return path.to_str().map(str::to_string);
+        };
+        let full_path = if path.is_absolute() {
+            Cow::Borrowed(path)
+        } else {
+            Cow::Owned(cwd.join(path))
+        };
+        // Rebuilding from components also turns `/` into `\` on Windows.
+        let needs_cleanup = cfg!(windows)
+            || full_path
+                .components()
+                .any(|c| matches!(c, Component::ParentDir | Component::CurDir));
+        let full_path = if needs_cleanup {
+            let mut normalized = PathBuf::new();
+            for component in full_path.components() {
+                match component {
+                    Component::ParentDir => {
+                        normalized.pop();
+                    }
+                    Component::CurDir => {}
+                    _ => normalized.push(component),
+                }
+            }
+            Cow::Owned(normalized)
+        } else {
+            full_path
+        };
+        let s = full_path.to_str()?;
+        Some(s.strip_prefix(r"\\?\").unwrap_or(s).to_string())
+    }
+
+    /// Returns None for the root directory itself (empty, ".", or matching a root path).
+    fn apply(&self, path: &Path) -> Option<String> {
+        let mut path_str = self.normalize(path)?;
+        if let Some(pfx) = &self.prefix {
+            if path_str == pfx.trim_end_matches(['/', '\\']) {
+                // This is the root directory itself — skip it
+                return None;
+            }
+            if path_str.starts_with(pfx.as_str()) {
+                path_str = path_str[pfx.len()..].to_string();
+            }
         }
-        s
-    })
+        if path_str.is_empty() || path_str == "." {
+            return None;
+        }
+        // Filter out root search paths themselves
+        if self.roots.contains(&path_str) {
+            return None;
+        }
+        Some(path_str)
+    }
 }
 
 /// Normalize path separators to the platform default.
@@ -843,38 +930,6 @@ fn normalize_separators(path: &str) -> String {
     } else {
         path.to_string()
     }
-}
-
-/// Normalize a path and optionally strip a relative prefix.
-/// Returns None for the root directory itself (empty, ".", or matching a root path).
-fn normalize_and_strip(
-    path: &std::path::Path,
-    absolute: bool,
-    prefix: &Option<String>,
-    roots: &[String],
-) -> Option<String> {
-    let mut path_str = normalize_path(path, absolute)?;
-    if let Some(pfx) = prefix {
-        if path_str == pfx.trim_end_matches('/').trim_end_matches('\\') {
-            // This is the root directory itself — skip it
-            return None;
-        }
-        if path_str.starts_with(pfx) {
-            path_str = path_str[pfx.len()..].to_string();
-        }
-    }
-    if path_str.is_empty() || path_str == "." {
-        return None;
-    }
-    // Filter out root search paths themselves
-    if roots.iter().any(|root| {
-        let normalized_root = normalize_separators(root);
-        let normalized_root = normalized_root.trim_end_matches('/').trim_end_matches('\\');
-        path_str == normalized_root
-    }) {
-        return None;
-    }
-    Some(path_str)
 }
 
 fn py_files_impl(
@@ -888,7 +943,7 @@ fn py_files_impl(
         return py_files_impl_parallel(args, absolute, relative_to, roots);
     }
 
-    let prefix = build_relative_prefix(relative_to);
+    let format = PathFormat::new(absolute, relative_to, roots);
 
     let haystack_builder = args.haystack_builder();
     let unsorted = args
@@ -910,7 +965,7 @@ fn py_files_impl(
             break;
         }
 
-        if let Some(p) = normalize_and_strip(haystack.path(), absolute, &prefix, roots) {
+        if let Some(p) = format.apply(haystack.path()) {
             matches.push(p);
         }
     }
@@ -927,7 +982,7 @@ fn py_files_impl_parallel(
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
-    let prefix = build_relative_prefix(relative_to);
+    let format = PathFormat::new(absolute, relative_to, roots);
 
     let (tx, rx) = mpsc::channel::<String>();
 
@@ -952,7 +1007,7 @@ fn py_files_impl_parallel(
     args.walk_builder()?.build_parallel().run(|| {
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
-        let prefix = &prefix;
+        let format = &format;
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -960,7 +1015,7 @@ fn py_files_impl_parallel(
                 None => return WalkState::Continue,
             };
 
-            if let Some(p) = normalize_and_strip(haystack.path(), absolute, prefix, roots) {
+            if let Some(p) = format.apply(haystack.path()) {
                 match tx.send(p) {
                     Ok(_) => WalkState::Continue,
                     Err(_) => WalkState::Quit,
@@ -976,46 +1031,6 @@ fn py_files_impl_parallel(
 
     // Collect results
     Ok(collector.join().unwrap())
-}
-
-/// Helper to normalize a path (make absolute, resolve symlinks, strip Windows prefix)
-fn normalize_path(path: &std::path::Path, absolute: bool) -> Option<String> {
-    if absolute {
-        let full_path = if path.is_absolute() {
-            path.to_path_buf()
-        } else {
-            std::env::current_dir().unwrap_or_default().join(path)
-        };
-
-        full_path
-            .canonicalize()
-            .ok()
-            .or_else(|| {
-                use std::path::Component;
-                let mut normalized = std::path::PathBuf::new();
-                for component in full_path.components() {
-                    match component {
-                        Component::ParentDir => {
-                            normalized.pop();
-                        }
-                        Component::CurDir => {}
-                        _ => normalized.push(component),
-                    }
-                }
-                Some(normalized)
-            })
-            .map(|p| {
-                let s = p.to_string_lossy();
-                if let Some(stripped) = s.strip_prefix(r"\\?\") {
-                    std::path::PathBuf::from(stripped)
-                } else {
-                    p
-                }
-            })
-            .and_then(|p| p.to_str().map(|s| s.to_string()))
-    } else {
-        path.to_str().map(|s| s.to_string())
-    }
 }
 
 /// Helper to create FileInfo from path and metadata
@@ -1154,7 +1169,7 @@ fn py_files_with_info_impl(
         return py_files_with_info_impl_parallel(args, absolute, relative_to, roots);
     }
 
-    let prefix = build_relative_prefix(relative_to);
+    let format = PathFormat::new(absolute, relative_to, roots);
 
     // Single-threaded implementation
     let haystack_builder = args.haystack_builder();
@@ -1180,7 +1195,7 @@ fn py_files_with_info_impl(
         }
 
         let path = haystack.path();
-        if let Some(path_str) = normalize_and_strip(path, absolute, &prefix, roots)
+        if let Some(path_str) = format.apply(path)
             && let Ok(metadata) = std::fs::metadata(path)
         {
             let info = create_file_info(path_str.clone(), &metadata);
@@ -1201,7 +1216,7 @@ fn py_files_with_info_impl_parallel(
     let haystack_builder = args.haystack_builder();
     let max_count = args.max_count();
     let quit_after_match = args.quit_after_match();
-    let prefix = build_relative_prefix(relative_to);
+    let format = PathFormat::new(absolute, relative_to, roots);
 
     let (tx, rx) = mpsc::channel::<(String, FileInfo)>();
 
@@ -1226,7 +1241,7 @@ fn py_files_with_info_impl_parallel(
     args.walk_builder()?.build_parallel().run(|| {
         let haystack_builder = &haystack_builder;
         let tx = tx.clone();
-        let prefix = &prefix;
+        let format = &format;
 
         Box::new(move |result| {
             let haystack = match haystack_builder.build_from_result(result) {
@@ -1235,7 +1250,7 @@ fn py_files_with_info_impl_parallel(
             };
 
             let path = haystack.path();
-            if let Some(path_str) = normalize_and_strip(path, absolute, prefix, roots)
+            if let Some(path_str) = format.apply(path)
                 && let Ok(metadata) = std::fs::metadata(path)
             {
                 let info = create_file_info(path_str.clone(), &metadata);

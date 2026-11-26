@@ -26,8 +26,9 @@ Rust <-> Python boundary:
   - `py_search_impl*` / `py_files_impl*` / `py_files_with_info_impl*`: sequential and parallel
     (`ignore` walker) variants. Output is collected into in-memory buffers, not stdout.
     `search_structured` collects matches with its own `Sink` (`structured.rs`), no JSON round-trip.
-  - Path handling: `normalize_path`, `normalize_separators`, `normalize_and_strip`,
-    `build_relative_prefix` (absolute paths, `relative_to`, Windows `\\?\` and separators).
+  - Path handling: `PathFormat` (absolute paths, `relative_to`, root filtering, Windows `\\?\`)
+    and `normalize_separators`. Absolute paths are lexical (cwd joined once, `.`/`..` removed),
+    never canonicalized: symlinks stay unresolved, so results stay under the root passed in.
   - Errors from argument building or searching are raised as `ValueError`.
 - `src/ripgrep_core/structured.rs`: `StructuredSink`, builds `SearchMatch` values directly; its
   submatch logic mirrors grep-printer's JSON sink, so results match `json=True`.
@@ -53,7 +54,7 @@ Python side:
 | Register a new function/class | `src/lib.rs`, `ripgrep_rs/__init__.py` (`__all__`), stub `__all__` |
 | Search/printer behavior, defaults | `src/ripgrep_core/lowargs.rs`, `src/ripgrep_core/hiargs.rs` |
 | Ignore/hidden/glob filtering | `hiargs.rs` (walk builder), `haystack.rs` |
-| Path normalization, `absolute`, `relative_to` | `normalize_*` helpers in `src/ripgrep_core.rs` |
+| Path normalization, `absolute`, `relative_to` | `PathFormat` in `src/ripgrep_core.rs` |
 | Tests | `tests/test_search.py`, `tests/test_absolute_paths.py`, smoke script `test.py` |
 | Benchmarks | `benchmarks/bench.py` |
 | CI / wheels | `.github/workflows/ci.yml`, `.github/workflows/release.yml` |
