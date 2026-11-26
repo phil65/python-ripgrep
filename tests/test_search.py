@@ -135,3 +135,47 @@ def test_max_bytes_limits_each_file(mixed_tree: Path):
     assert _names(matches) == ["a.py", "b.toml"]
     assert len(search(["hit"], paths=[str(mixed_tree)], max_bytes=20)) == 2
     assert _names(search_structured(["hit"], paths=[str(mixed_tree)])) == ["a.py", "b.toml", "c.txt"]
+
+
+@pytest.fixture
+def many_files(tmp_path: Path) -> Path:
+    for i in range(40):
+        sub = tmp_path / f"d{i % 4}"
+        sub.mkdir(exist_ok=True)
+        (sub / f"f{i}.txt").write_bytes(b"x\nhit one\nhit two\n")
+    return tmp_path
+
+
+def test_search_structured_unsorted_matches_sorted(many_files: Path):
+    """The (parallel) unsorted path finds the same matches as the sorted one."""
+    from ripgrep_rs import PySortMode, PySortModeKind
+
+    sort = PySortMode(kind=PySortModeKind.Path)
+    unsorted = search_structured(["hit"], paths=[str(many_files)])
+    ordered = search_structured(["hit"], paths=[str(many_files)], sort=sort)
+    keys = lambda ms: sorted((m.path, m.line_number, m.line_text) for m in ms)  # noqa: E731
+    assert len(ordered) == 80
+    assert keys(unsorted) == keys(ordered)
+
+
+def test_search_structured_max_total_unsorted(many_files: Path):
+    matches = search_structured(["hit"], paths=[str(many_files)], max_total=5)
+    assert len(matches) == 5
+    # One match per file still respects max_count with max_total.
+    matches = search_structured(["hit"], paths=[str(many_files)], max_total=7, max_count=1)
+    assert len(matches) == 7
+    assert len({m.path for m in matches}) == 7
+
+
+def test_search_json_unsorted_matches_sorted(many_files: Path):
+    from ripgrep_rs import PySortMode, PySortModeKind
+
+    sort = PySortMode(kind=PySortModeKind.Path)
+    unsorted = search(["hit"], paths=[str(many_files)], json=True)
+    ordered = search(["hit"], paths=[str(many_files)], json=True, sort=sort)
+    # "end" messages carry timings, compare everything else.
+    lines = lambda out: sorted(  # noqa: E731
+        line for chunk in out for line in chunk.splitlines() if '"type":"end"' not in line
+    )
+    assert len(ordered) == 40
+    assert lines(unsorted) == lines(ordered)

@@ -571,9 +571,57 @@ fn py_search_impl_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     Ok(results.into_inner().unwrap())
 }
 
+/// Search one haystack, returning grep-printer's JSON messages for it (None when nothing
+/// was printed or the output is not UTF-8).
+fn search_haystack_json(
+    args: &HiArgs,
+    matcher: &search::PatternMatcher,
+    searcher: &mut grep::searcher::Searcher,
+    haystack: &haystack::Haystack,
+) -> std::io::Result<Option<String>> {
+    let mut printer_buf: Vec<u8> = vec![];
+    searcher.set_binary_detection(args.binary_detection(haystack));
+    {
+        let mut json_printer = args.printer_json(&mut printer_buf);
+        let path = haystack.path();
+        match matcher {
+            search::PatternMatcher::RustRegex(m) => {
+                let mut sink = json_printer.sink_with_path(m, path);
+                searcher.search_path(m, path, &mut sink)?;
+            }
+        }
+    }
+    if printer_buf.is_empty() {
+        return Ok(None);
+    }
+    Ok(String::from_utf8(printer_buf).ok())
+}
+
+/// Search one haystack, collecting at most `limit` matches.
+fn search_haystack_structured(
+    args: &HiArgs,
+    matcher: &search::PatternMatcher,
+    searcher: &mut grep::searcher::Searcher,
+    haystack: &haystack::Haystack,
+    limit: Option<usize>,
+) -> std::io::Result<Vec<SearchMatch>> {
+    searcher.set_binary_detection(args.binary_detection(haystack));
+    let path = haystack.path();
+    let path_str = path.to_string_lossy();
+    match matcher {
+        search::PatternMatcher::RustRegex(m) => {
+            let mut sink = StructuredSink::new(m, &path_str, limit);
+            searcher.search_path(m, path, &mut sink)?;
+            Ok(sink.matches)
+        }
+    }
+}
+
 /// JSON mode search implementation
 fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
-    use search::PatternMatcher;
+    if args.threads() > 1 && args.sort_mode().is_none() {
+        return py_search_impl_json_parallel(args);
+    }
 
     let haystack_builder = args.haystack_builder();
     let unsorted = args
@@ -588,33 +636,11 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     let mut results = Vec::new();
 
     for haystack in haystacks {
-        let mut printer_buf: Vec<u8> = vec![];
-        searcher.set_binary_detection(args.binary_detection(&haystack));
-
-        let search_result = {
-            let mut json_printer = args.printer_json(&mut printer_buf);
-            let path = haystack.path();
-
-            match &matcher {
-                PatternMatcher::RustRegex(m) => {
-                    let mut sink = json_printer.sink_with_path(m, path);
-                    searcher.search_path(m, path, &mut sink)
-                }
-            }
-        };
-
-        match search_result {
-            Ok(_) => {
-                if !printer_buf.is_empty()
-                    && let Ok(s) = String::from_utf8(printer_buf)
-                {
-                    results.push(s);
-                }
-            }
+        match search_haystack_json(args, &matcher, &mut searcher, &haystack) {
+            Ok(output) => results.extend(output),
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
             Err(err) => {
                 err_message!("{}: {}", haystack.path().display(), err);
-                continue;
             }
         }
     }
@@ -622,12 +648,55 @@ fn py_search_impl_json(args: &HiArgs) -> anyhow::Result<Vec<String>> {
     Ok(results)
 }
 
+/// Parallel JSON mode search (unsorted: results come in walk order).
+fn py_search_impl_json_parallel(args: &HiArgs) -> anyhow::Result<Vec<String>> {
+    use std::sync::Mutex;
+
+    let haystack_builder = args.haystack_builder();
+    let matcher = args.matcher()?;
+    let searcher = args.searcher()?;
+    let results = Mutex::new(Vec::new());
+
+    args.walk_builder()?.build_parallel().run(|| {
+        let haystack_builder = &haystack_builder;
+        let matcher = &matcher;
+        let results = &results;
+        let mut searcher = searcher.clone();
+
+        Box::new(move |result| {
+            let Some(haystack) = haystack_builder.build_from_result(result) else {
+                return WalkState::Continue;
+            };
+            match search_haystack_json(args, matcher, &mut searcher, &haystack) {
+                Ok(Some(output)) => {
+                    if let Ok(mut guard) = results.lock() {
+                        guard.push(output);
+                    }
+                }
+                Ok(None) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                    return WalkState::Quit;
+                }
+                Err(err) => {
+                    err_message!("{}: {}", haystack.path().display(), err);
+                }
+            }
+            WalkState::Continue
+        })
+    });
+
+    Ok(results.into_inner().unwrap())
+}
+
 /// Structured search implementation - returns parsed SearchMatch objects
 fn py_search_impl_structured(
     args: &HiArgs,
     max_total: Option<u64>,
 ) -> anyhow::Result<Vec<SearchMatch>> {
-    use search::PatternMatcher;
+    let max_total = max_total.map(|m| m as usize);
+    if args.threads() > 1 && args.sort_mode().is_none() {
+        return py_search_impl_structured_parallel(args, max_total);
+    }
 
     let haystack_builder = args.haystack_builder();
     let unsorted = args
@@ -640,7 +709,6 @@ fn py_search_impl_structured(
     let mut searcher = args.searcher()?;
 
     let mut results = Vec::new();
-    let max_total = max_total.map(|m| m as usize);
 
     for haystack in haystacks {
         let remaining = max_total.map(|max| max - results.len());
@@ -648,29 +716,78 @@ fn py_search_impl_structured(
             break;
         }
 
-        searcher.set_binary_detection(args.binary_detection(&haystack));
-        let path = haystack.path();
-        let path_str = path.to_string_lossy();
-
-        let search_result = match &matcher {
-            PatternMatcher::RustRegex(m) => {
-                let mut sink = StructuredSink::new(m, &path_str, remaining);
-                searcher
-                    .search_path(m, path, &mut sink)
-                    .map(|()| sink.matches)
-            }
-        };
-
-        match search_result {
+        match search_haystack_structured(args, &matcher, &mut searcher, &haystack, remaining) {
             Ok(matches) => results.extend(matches),
             Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => break,
             Err(err) => {
                 err_message!("{}: {}", haystack.path().display(), err);
-                continue;
             }
         }
     }
 
+    Ok(results)
+}
+
+/// Parallel structured search (unsorted: results come in walk order). `max_total` is
+/// enforced with a shared counter; workers racing past it are truncated at the end.
+fn py_search_impl_structured_parallel(
+    args: &HiArgs,
+    max_total: Option<usize>,
+) -> anyhow::Result<Vec<SearchMatch>> {
+    use std::sync::Mutex;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let haystack_builder = args.haystack_builder();
+    let matcher = args.matcher()?;
+    let searcher = args.searcher()?;
+    let results = Mutex::new(Vec::new());
+    let collected = AtomicUsize::new(0);
+
+    args.walk_builder()?.build_parallel().run(|| {
+        let haystack_builder = &haystack_builder;
+        let matcher = &matcher;
+        let results = &results;
+        let collected = &collected;
+        let mut searcher = searcher.clone();
+
+        Box::new(move |result| {
+            let remaining = match max_total {
+                Some(max) => match max.checked_sub(collected.load(Ordering::Relaxed)) {
+                    Some(0) | None => return WalkState::Quit,
+                    remaining => remaining,
+                },
+                None => None,
+            };
+            let Some(haystack) = haystack_builder.build_from_result(result) else {
+                return WalkState::Continue;
+            };
+            match search_haystack_structured(args, matcher, &mut searcher, &haystack, remaining) {
+                Ok(matches) if !matches.is_empty() => {
+                    let count = matches.len();
+                    if let Ok(mut guard) = results.lock() {
+                        guard.extend(matches);
+                    }
+                    let total = collected.fetch_add(count, Ordering::Relaxed) + count;
+                    if max_total.is_some_and(|max| total >= max) {
+                        return WalkState::Quit;
+                    }
+                }
+                Ok(_) => {}
+                Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe => {
+                    return WalkState::Quit;
+                }
+                Err(err) => {
+                    err_message!("{}: {}", haystack.path().display(), err);
+                }
+            }
+            WalkState::Continue
+        })
+    });
+
+    let mut results = results.into_inner().unwrap();
+    if let Some(max) = max_total {
+        results.truncate(max);
+    }
     Ok(results)
 }
 
