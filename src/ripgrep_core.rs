@@ -48,6 +48,7 @@ pub struct PyArgs {
     pub max_depth: Option<usize>,
     pub absolute: Option<bool>,
     pub relative_to: Option<String>,
+    pub follow: bool,
 }
 
 #[pymethods]
@@ -78,6 +79,7 @@ impl PyArgs {
         max_depth=None,
         absolute=None,
         relative_to=None,
+        follow=false,
     ))]
     fn new(
         patterns: Vec<String>,
@@ -104,6 +106,7 @@ impl PyArgs {
         max_depth: Option<usize>,
         absolute: Option<bool>,
         relative_to: Option<String>,
+        follow: bool,
     ) -> Self {
         PyArgs {
             patterns,
@@ -130,6 +133,7 @@ impl PyArgs {
             max_depth,
             absolute,
             relative_to,
+            follow,
         }
     }
 }
@@ -365,6 +369,9 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
         low_args.max_depth = Some(max_depth);
     }
 
+    // Follow symbolic links
+    low_args.follow = py_args.follow;
+
     HiArgs::from_low_args(low_args)
 }
 
@@ -391,6 +398,7 @@ fn pyargs_to_hiargs(py_args: &PyArgs, mode: lowargs::Mode) -> anyhow::Result<HiA
     no_ignore=None,
     hidden=None,
     json=None,
+    follow=false,
 ))]
 pub fn py_search(
     py: Python<'_>,
@@ -414,6 +422,7 @@ pub fn py_search(
     no_ignore: Option<bool>,
     hidden: Option<bool>,
     json: Option<bool>,
+    follow: bool,
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -441,6 +450,7 @@ pub fn py_search(
             max_depth: None,    // search doesn't use this
             absolute: None,     // search doesn't use this
             relative_to: None,  // search doesn't use this
+            follow,
         };
 
         let mode = if py_args.json == Some(true) {
@@ -807,6 +817,7 @@ fn py_search_impl_structured_parallel(
     smart_case=None,
     no_ignore=None,
     hidden=None,
+    follow=false,
 ))]
 pub fn py_search_structured(
     py: Python<'_>,
@@ -823,6 +834,7 @@ pub fn py_search_structured(
     smart_case: Option<bool>,
     no_ignore: Option<bool>,
     hidden: Option<bool>,
+    follow: bool,
 ) -> PyResult<Vec<SearchMatch>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -850,6 +862,7 @@ pub fn py_search_structured(
             max_depth: None,
             absolute: None,
             relative_to: None,
+            follow,
         };
 
         let mode = lowargs::Mode::Search(lowargs::SearchMode::JSON);
@@ -875,6 +888,7 @@ pub fn py_search_structured(
     max_depth=None,
     absolute=None,
     relative_to=None,
+    follow=false,
 ))]
 pub fn py_files(
     py: Python<'_>,
@@ -889,6 +903,7 @@ pub fn py_files(
     max_depth: Option<usize>,
     absolute: Option<bool>,
     relative_to: Option<String>,
+    follow: bool,
 ) -> PyResult<Vec<String>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -916,6 +931,7 @@ pub fn py_files(
             max_depth,
             absolute,
             relative_to,
+            follow,
         };
 
         let args_result = pyargs_to_hiargs(&py_args, lowargs::Mode::Files);
@@ -1151,7 +1167,7 @@ fn py_files_impl_parallel(
 }
 
 /// Helper to create FileInfo from path and metadata
-fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo {
+fn create_file_info(path_str: String, metadata: &std::fs::Metadata, islink: bool) -> FileInfo {
     let mtime = metadata
         .modified()
         .ok()
@@ -1200,7 +1216,7 @@ fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo 
         size: metadata.len(),
         file_type,
         created,
-        islink: metadata.is_symlink(),
+        islink,
         mode,
         uid,
         gid,
@@ -1223,6 +1239,7 @@ fn create_file_info(path_str: String, metadata: &std::fs::Metadata) -> FileInfo 
     max_depth=None,
     absolute=None,
     relative_to=None,
+    follow=false,
 ))]
 pub fn py_files_with_info(
     py: Python<'_>,
@@ -1236,6 +1253,7 @@ pub fn py_files_with_info(
     max_depth: Option<usize>,
     absolute: Option<bool>,
     relative_to: Option<String>,
+    follow: bool,
 ) -> PyResult<HashMap<String, FileInfo>> {
     py.detach(|| {
         let py_args = PyArgs {
@@ -1263,6 +1281,7 @@ pub fn py_files_with_info(
             max_depth,
             absolute,
             relative_to,
+            follow,
         };
 
         let args = pyargs_to_hiargs(&py_args, lowargs::Mode::Files)
@@ -1315,7 +1334,8 @@ fn py_files_with_info_impl(
         if let Some(path_str) = format.apply(path)
             && let Ok(metadata) = std::fs::metadata(path)
         {
-            let info = create_file_info(path_str.clone(), &metadata);
+            let islink = std::fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink());
+            let info = create_file_info(path_str.clone(), &metadata, islink);
             results.insert(path_str, info);
         }
     }
@@ -1370,7 +1390,8 @@ fn py_files_with_info_impl_parallel(
             if let Some(path_str) = format.apply(path)
                 && let Ok(metadata) = std::fs::metadata(path)
             {
-                let info = create_file_info(path_str.clone(), &metadata);
+                let islink = std::fs::symlink_metadata(path).is_ok_and(|m| m.is_symlink());
+                let info = create_file_info(path_str.clone(), &metadata, islink);
                 match tx.send((path_str, info)) {
                     Ok(_) => return WalkState::Continue,
                     Err(_) => return WalkState::Quit,

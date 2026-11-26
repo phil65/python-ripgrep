@@ -128,6 +128,7 @@ Search for regex patterns in files, returning raw formatted string results.
 | `no_ignore` | `bool \| None` | Don't respect .gitignore |
 | `hidden` | `bool \| None` | Search hidden files |
 | `json` | `bool \| None` | Return JSON Lines format |
+| `follow` | `bool` | Follow symbolic links while traversing directories (default `False`) |
 
 #### `search_structured(patterns, ...)`
 
@@ -148,6 +149,7 @@ Search for regex patterns, returning parsed `SearchMatch` objects.
 | `smart_case` | `bool \| None` | Case-insensitive unless pattern has uppercase |
 | `no_ignore` | `bool \| None` | Don't respect .gitignore |
 | `hidden` | `bool \| None` | Search hidden files |
+| `follow` | `bool` | Follow symbolic links while traversing directories (default `False`) |
 
 #### `files(...)`
 
@@ -166,6 +168,7 @@ List files that would be searched, respecting ignore rules.
 | `max_depth` | `int \| None` | Maximum directory depth |
 | `absolute` | `bool \| None` | Return absolute paths (lexical: symlinks are not resolved) |
 | `relative_to` | `str \| None` | Strip this prefix from paths |
+| `follow` | `bool` | Follow symbolic links while traversing directories (default `False`) |
 
 #### `files_with_info(...)`
 

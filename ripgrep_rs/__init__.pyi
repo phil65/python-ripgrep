@@ -98,7 +98,14 @@ def search(
     no_ignore: bool | None = None,
     hidden: bool | None = None,
     json: bool | None = None,
-) -> list[str]: ...
+    follow: bool = False,
+) -> list[str]:
+    """Search for regex patterns in files, returning raw formatted string results.
+
+    Args:
+        follow: Follow symbolic links while traversing directories.
+    """
+    ...
 def search_structured(
     patterns: list[str],
     paths: list[str] | None = None,
@@ -113,6 +120,7 @@ def search_structured(
     smart_case: bool | None = None,
     no_ignore: bool | None = None,
     hidden: bool | None = None,
+    follow: bool = False,
 ) -> list[SearchMatch]:
     """Search for patterns and return structured match objects.
 
@@ -135,6 +143,7 @@ def search_structured(
         smart_case: Enable smart case (case-insensitive unless pattern has uppercase).
         no_ignore: Don't respect .gitignore and other ignore files.
         hidden: Search hidden files and directories.
+        follow: Follow symbolic links while traversing directories.
     """
     ...
 
@@ -150,7 +159,14 @@ def files(
     max_depth: int | None = None,
     absolute: bool | None = None,
     relative_to: str | None = None,
-) -> list[str]: ...
+    follow: bool = False,
+) -> list[str]:
+    """List files that would be searched, respecting ignore rules.
+
+    Args:
+        follow: Follow symbolic links while traversing directories.
+    """
+    ...
 
 @final
 class FileInfo:
@@ -212,10 +228,14 @@ def files_with_info(
     max_depth: int | None = None,
     absolute: bool | None = None,
     relative_to: str | None = None,
+    follow: bool = False,
 ) -> dict[str, FileInfo]:
     """List files with detailed metadata.
 
     Returns a dictionary mapping file paths to FileInfo objects,
     similar to fsspec's detail=True mode.
+
+    Args:
+        follow: Follow symbolic links while traversing directories.
     """
     ...
